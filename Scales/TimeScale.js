@@ -2,21 +2,21 @@ function newTimeScale () {
   const MODULE_NAME = 'Time Scale'
 
   let thisObject = {
-    lenghtPercentage: undefined,
     container: undefined,
     date: undefined,
     fitFunction: undefined,
-    visible: true,
+    payload: undefined,
+    isVisible: true,
+    fromDate: undefined,
+    toDate: undefined,
+    onMouseOverSomeTimeMachineContainer: onMouseOverSomeTimeMachineContainer,
     physics: physics,
     draw: draw,
+    drawForeground: drawForeground,
     getContainer: getContainer,
     initialize: initialize,
     finalize: finalize
   }
-
-  const LENGHT_PERCENTAGE_DEFAULT_VALUE = 5
-  const STEP_SIZE = 5
-  const MIN_HEIGHT = 50
 
   thisObject.container = newContainer()
   thisObject.container.initialize(MODULE_NAME)
@@ -26,37 +26,89 @@ function newTimeScale () {
   thisObject.container.isWheelable = true
   thisObject.container.detectMouseOver = true
 
-  thisObject.container.frame.width = 190
-  thisObject.container.frame.height = 25
+  thisObject.container.frame.width = UI_PANEL.WIDTH.NORMAL
+  thisObject.container.frame.height = 40
 
+  let visible = true
+  let autoScaleButton
   let isMouseOver
+
+  let onMouseWheelEventSubscriptionId
+  let onMouseOverEventSubscriptionId
+  let onMouseNotOverEventSubscriptionId
+  let onScaleChangedEventSubscriptionId
+
+  let coordinateSystem
+  let limitingContainer
+
+  let mouse = {
+    position: {
+      x: 0,
+      y: 0
+    }
+  }
+
   return thisObject
 
   function finalize () {
+    thisObject.container.eventHandler.stopListening(onMouseWheelEventSubscriptionId)
+    thisObject.container.eventHandler.stopListening(onMouseOverEventSubscriptionId)
+    thisObject.container.eventHandler.stopListening(onMouseNotOverEventSubscriptionId)
+    coordinateSystem.eventHandler.stopListening(onScaleChangedEventSubscriptionId)
+
     thisObject.container.finalize()
     thisObject.container = undefined
     thisObject.fitFunction = undefined
+    thisObject.payload = undefined
+
+    coordinateSystem = undefined
+    limitingContainer = undefined
+    mouse = undefined
+
+    autoScaleButton.finalize()
+    autoScaleButton = undefined
   }
 
-  function initialize () {
-    thisObject.container.eventHandler.listenToEvent('onMouseWheel', onMouseWheel)
-    thisObject.container.eventHandler.listenToEvent('onMouseOver', onMouseOver)
-    thisObject.container.eventHandler.listenToEvent('onMouseNotOver', onMouseNotOver)
+  function initialize (pCoordinateSystem, pLimitingContainer) {
+    coordinateSystem = pCoordinateSystem
+    limitingContainer = pLimitingContainer
 
-    thisObject.lenghtPercentage = window.localStorage.getItem(MODULE_NAME)
-    if (!thisObject.lenghtPercentage) {
-      thisObject.lenghtPercentage = LENGHT_PERCENTAGE_DEFAULT_VALUE
+    onMouseWheelEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onMouseWheel', onMouseWheel)
+    onMouseOverEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onMouseOver', onMouseOver)
+    onMouseNotOverEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onMouseNotOver', onMouseNotOver)
+    onScaleChangedEventSubscriptionId = coordinateSystem.eventHandler.listenToEvent('Scale Changed', onScaleChanged)
+
+    autoScaleButton = newAutoScaleButton()
+    autoScaleButton.container.connectToParent(thisObject.container)
+    autoScaleButton.initialize('X', coordinateSystem)
+
+    readObjectState()
+  }
+
+  function onMouseOverSomeTimeMachineContainer (event) {
+    if (event.containerId === undefined) {
+      /* This happens when the mouse over was not at the instance of a certain scale, but anywhere else. */
+      visible = true
     } else {
-      thisObject.lenghtPercentage = JSON.parse(thisObject.lenghtPercentage)
+      if (event.containerId === thisObject.container.id) {
+        visible = true
+      } else {
+        visible = false
+        turnOnCounter = 0
+      }
     }
-
-    let event = {}
-    event.lenghtPercentage = thisObject.lenghtPercentage
-    thisObject.container.eventHandler.raiseEvent('Lenght Percentage Changed', event)
+    mouse = {
+      position: {
+        x: event.x,
+        y: event.y
+      }
+    }
   }
 
-  function onMouseOver () {
+  function onMouseOver (event) {
     isMouseOver = true
+    event.containerId = thisObject.container.id
+    thisObject.container.eventHandler.raiseEvent('onMouseOverScale', event)
   }
 
   function onMouseNotOver () {
@@ -64,147 +116,166 @@ function newTimeScale () {
   }
 
   function onMouseWheel (event) {
-    delta = event.wheelDelta
+    if (event.shiftKey === true) {
+      autoScaleButton.container.eventHandler.raiseEvent('onMouseWheel', event)
+      return
+    }
+    let factor
+    let morePower = 10
+    if (event.buttons === 4) { morePower = 1 } // Mouse wheel pressed.
+
+    let delta = event.wheelDelta
     if (delta < 0) {
-      thisObject.lenghtPercentage = thisObject.lenghtPercentage - STEP_SIZE
-      if (thisObject.lenghtPercentage < STEP_SIZE) { thisObject.lenghtPercentage = STEP_SIZE }
+      factor = -0.01 * morePower
     } else {
-      thisObject.lenghtPercentage = thisObject.lenghtPercentage + STEP_SIZE
-      if (thisObject.lenghtPercentage > 100) { thisObject.lenghtPercentage = 100 }
+      factor = 0.01 * morePower
     }
 
-    event.lenghtPercentage = thisObject.lenghtPercentage
-    thisObject.container.eventHandler.raiseEvent('Lenght Percentage Changed', event)
-
-    window.localStorage.setItem(MODULE_NAME, thisObject.lenghtPercentage)
+    coordinateSystem.zoomX(factor, event, limitingContainer, MODULE_NAME)
   }
 
-  function getContainer (point) {
+  function onScaleChanged () {
+    saveObjectState()
+  }
+
+  function getContainer (point, purpose) {
     if (thisObject.container.frame.isThisPointHere(point, true) === true) {
       return thisObject.container
     }
   }
 
-  function physics () {
-
-  }
-
-  function draw () {
-    drawTime()
-    drawArrows()
-  }
-
-  function drawArrows () {
-    if (isMouseOver !== true) { return }
-    if (thisObject.visible === false || thisObject.date === undefined) { return }
-
-    const X_OFFSET = thisObject.container.frame.width / 2
-    const Y_OFFSET = thisObject.container.frame.height / 2 - 10
-    const HEIGHT = 18
-    const WIDTH = 6
-    const LINE_WIDTH = 3
-    const OPACITY = 0.2
-    const DISTANCE_BETWEEN_ARROWS = 10
-    const MIN_DISTANCE_FROM_CENTER = 110
-    const CURRENT_VALUE_DISTANCE = MIN_DISTANCE_FROM_CENTER + thisObject.lenghtPercentage
-    const MAX_DISTANCE_FROM_CENTER = MIN_DISTANCE_FROM_CENTER + 100 + DISTANCE_BETWEEN_ARROWS
-
-    let ARROW_DIRECTION = 0
-
-    ARROW_DIRECTION = -1
-    drawTwoArrows()
-    ARROW_DIRECTION = 1
-    drawTwoArrows()
-
-    function drawTwoArrows () {
-      point1 = {
-        x: X_OFFSET - WIDTH / 2 * ARROW_DIRECTION + DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + CURRENT_VALUE_DISTANCE * ARROW_DIRECTION,
-        y: Y_OFFSET - 0
-      }
-
-      point2 = {
-        x: X_OFFSET + WIDTH / 2 * ARROW_DIRECTION + DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + CURRENT_VALUE_DISTANCE * ARROW_DIRECTION,
-        y: Y_OFFSET + HEIGHT / 2
-      }
-
-      point3 = {
-        x: X_OFFSET - WIDTH / 2 * ARROW_DIRECTION + DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + CURRENT_VALUE_DISTANCE * ARROW_DIRECTION,
-        y: Y_OFFSET + HEIGHT
-      }
-
-      point1 = thisObject.container.frame.frameThisPoint(point1)
-      point2 = thisObject.container.frame.frameThisPoint(point2)
-      point3 = thisObject.container.frame.frameThisPoint(point3)
-
-      point4 = {
-        x: X_OFFSET - WIDTH / 2 * ARROW_DIRECTION - DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + CURRENT_VALUE_DISTANCE * ARROW_DIRECTION,
-        y: Y_OFFSET - 0
-      }
-
-      point5 = {
-        x: X_OFFSET + WIDTH / 2 * ARROW_DIRECTION - DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + CURRENT_VALUE_DISTANCE * ARROW_DIRECTION,
-        y: Y_OFFSET + HEIGHT / 2
-      }
-
-      point6 = {
-        x: X_OFFSET - WIDTH / 2 * ARROW_DIRECTION - DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + CURRENT_VALUE_DISTANCE * ARROW_DIRECTION,
-        y: Y_OFFSET + HEIGHT
-      }
-
-      point4 = thisObject.container.frame.frameThisPoint(point4)
-      point5 = thisObject.container.frame.frameThisPoint(point5)
-      point6 = thisObject.container.frame.frameThisPoint(point6)
-
-      point7 = {
-        x: X_OFFSET + WIDTH / 2 * ARROW_DIRECTION + DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + MAX_DISTANCE_FROM_CENTER * ARROW_DIRECTION,
-        y: Y_OFFSET - 0
-      }
-
-      point8 = {
-        x: X_OFFSET - WIDTH / 2 * ARROW_DIRECTION + DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + MAX_DISTANCE_FROM_CENTER * ARROW_DIRECTION,
-        y: Y_OFFSET + HEIGHT / 2
-      }
-
-      point9 = {
-        x: X_OFFSET + WIDTH / 2 * ARROW_DIRECTION + DISTANCE_BETWEEN_ARROWS / 2 * ARROW_DIRECTION + MAX_DISTANCE_FROM_CENTER * ARROW_DIRECTION,
-        y: Y_OFFSET + HEIGHT
-      }
-
-      point7 = thisObject.container.frame.frameThisPoint(point7)
-      point8 = thisObject.container.frame.frameThisPoint(point8)
-      point9 = thisObject.container.frame.frameThisPoint(point9)
-
-      browserCanvasContext.setLineDash([0, 0])
-
-      browserCanvasContext.beginPath()
-
-      browserCanvasContext.moveTo(point1.x, point1.y)
-      browserCanvasContext.lineTo(point2.x, point2.y)
-      browserCanvasContext.lineTo(point3.x, point3.y)
-
-      browserCanvasContext.moveTo(point4.x, point4.y)
-      browserCanvasContext.lineTo(point5.x, point5.y)
-      browserCanvasContext.lineTo(point6.x, point6.y)
-
-      browserCanvasContext.moveTo(point7.x, point7.y)
-      browserCanvasContext.lineTo(point8.x, point8.y)
-      browserCanvasContext.lineTo(point9.x, point9.y)
-
-      browserCanvasContext.lineWidth = LINE_WIDTH
-      browserCanvasContext.strokeStyle = 'rgba(' + UI_COLOR.DARK + ', ' + OPACITY + ')'
-      browserCanvasContext.stroke()
+  function saveObjectState () {
+    try {
+      let code = JSON.parse(thisObject.payload.node.code)
+      code.fromDate = (new Date(coordinateSystem.min.x)).toISOString()
+      code.toDate = (new Date(coordinateSystem.max.x)).toISOString()
+      code.autoMinScale = coordinateSystem.autoMinXScale
+      code.autoMaxScale = coordinateSystem.autoMaxXScale
+      thisObject.payload.node.code = JSON.stringify(code, null, 4)
+    } catch (err) {
+       // we ignore errors here since most likely they will be parsing errors.
     }
   }
 
-  function drawTime () {
-    if (thisObject.visible === false || thisObject.date === undefined) { return }
+  function readObjectState () {
+    try {
+      let code = JSON.parse(thisObject.payload.node.code)
+
+      if (
+      (isNaN(Date.parse(code.fromDate)) || code.fromDate === null || code.fromDate === undefined) ||
+      (isNaN(Date.parse(code.toDate)) || code.toDate === null || code.toDate === undefined)
+        ) {
+        // not using this value
+      } else {
+        if (thisObject.fromDate !== Date.parse(code.fromDate) || thisObject.toDate !== Date.parse(code.toDate)) {
+          thisObject.fromDate = Date.parse(code.fromDate)
+          thisObject.toDate = Date.parse(code.toDate)
+          coordinateSystem.min.x = thisObject.fromDate
+          coordinateSystem.max.x = thisObject.toDate
+
+          if (code.autoMinScale !== undefined && (code.autoMinScale === true || code.autoMinScale === false) && code.autoMaxScale !== undefined && (code.autoMaxScale === true || code.autoMaxScale === false)) {
+            coordinateSystem.autoMinXScale = code.autoMinScale
+            coordinateSystem.autoMaxXScale = code.autoMaxScale
+            autoScaleButton.setStatus(code.autoMinScale, code.autoMaxScale)
+          }
+          coordinateSystem.recalculateScale()
+        }
+      }
+      saveObjectState() // this overrides any invalid value at the config.
+    } catch (err) {
+       // we ignore errors here since most likely they will be parsing errors.
+    }
+  }
+
+  function physics () {
+    readObjectState()
+    positioningPhysics()
+  }
+
+  function positioningPhysics () {
+    /* Container Limits */
+
+    let upCorner = {
+      x: 0,
+      y: 0
+    }
+
+    let bottonCorner = {
+      x: limitingContainer.frame.width,
+      y: limitingContainer.frame.height
+    }
+
+    upCorner = transformThisPoint(upCorner, limitingContainer)
+    bottonCorner = transformThisPoint(bottonCorner, limitingContainer)
+
+    upCorner = limitingContainer.fitFunction(upCorner, true)
+    bottonCorner = limitingContainer.fitFunction(bottonCorner, true)
+
+    /* Mouse Position Date Calculation */
+    let timePoint = {
+      x: mouse.position.x,
+      y: 0
+    }
+
+    let mouseDate = getDateFromPointAtBrowserCanvas(timePoint, limitingContainer, coordinateSystem)
+
+    thisObject.date = new Date(mouseDate)
+
+    /* timeScale Positioning */
+    timePoint = {
+      x: 0,
+      y: 0
+    }
+
+    timePoint = transformThisPoint(timePoint, limitingContainer.frame.container)
+    timePoint.x = mouse.position.x - thisObject.container.frame.width / 2
+
+    /* Checking against the container limits. */
+    if (timePoint.x < upCorner.x) { timePoint.x = upCorner.x }
+    if (timePoint.x + thisObject.container.frame.width > bottonCorner.x) { timePoint.x = bottonCorner.x - thisObject.container.frame.width }
+    if (timePoint.y < upCorner.y) { timePoint.y = upCorner.y }
+    if (timePoint.y + thisObject.container.frame.height > bottonCorner.y) { timePoint.y = bottonCorner.y - thisObject.container.frame.height }
+
+    thisObject.container.frame.position.x = timePoint.x
+    thisObject.container.frame.position.y = timePoint.y
+
+    thisObject.isVisible = true
+    if (thisObject.container.frame.position.y + thisObject.container.frame.height * 4 > bottonCorner.y ||
+        thisObject.container.frame.position.y < upCorner.y ||
+      thisObject.container.frame.position.x < upCorner.x) {
+      thisObject.isVisible = false
+    }
+  }
+
+  function draw () {
+    drawScaleBox()
+    autoScaleButton.draw()
+    if (visible === false) {
+      drawScaleDisplayCover(thisObject.container)
+    }
+  }
+
+  function drawForeground () {
+    if (isMouseOver === true) {
+      drawScaleBox()
+      autoScaleButton.draw()
+    }
+  }
+
+  function drawScaleBox () {
+    if (thisObject.date === undefined) { return }
 
     let label = thisObject.date.toUTCString()
     let labelArray = label.split(' ')
-    let label1 = labelArray[1] + ' ' + labelArray[2] + ' ' + labelArray[3]
-    let label2 = labelArray[4]
+    let label1 = thisObject.payload.node.payload.parentNode.name
+    let label2 = labelArray[1] + ' ' + labelArray[2] + ' ' + labelArray[3]
+    let label3 = labelArray[4]
 
-    drawScaleDisplay(label1, label2, 10, 60, thisObject.container, thisObject.fitFunction)
+    let icon1 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.payload.parentNode.type)
+    let icon2 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.type)
+
+    let backgroundColor = UI_COLOR.BLACK
+
+    drawScaleDisplay(label1, label2, label3, 0, 0, 0, icon1, icon2, thisObject.container, backgroundColor)
   }
 }
-

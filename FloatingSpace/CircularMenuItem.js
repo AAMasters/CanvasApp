@@ -5,15 +5,28 @@ function newCircularMenuItem () {
   let thisObject = {
     type: undefined,
     isDeployed: undefined,
+    askConfirmation: undefined,
+    confirmationLabel: undefined,
     iconOn: undefined,
     iconOff: undefined,
+    icons: undefined,
     currentIcon: undefined,
+    disableIfPropertyIsDefined: undefined,
+    propertyToCheckFor: undefined,
     action: undefined,
     actionFunction: undefined,
+    actionStatus: undefined,
     label: undefined,
     workingLabel: undefined,
     workDoneLabel: undefined,
     workFailedLabel: undefined,
+    secondaryAction: undefined,
+    secondaryLabel: undefined,
+    secondaryWorkingLabel: undefined,
+    secondaryWorkDoneLabel: undefined,
+    secondaryWorkFailedLabel: undefined,
+    secondaryIcon: undefined,
+    nextAction: undefined,
     visible: false,
     iconPathOn: undefined,
     iconPathOff: undefined,
@@ -23,8 +36,10 @@ function newCircularMenuItem () {
     angle: undefined,
     container: undefined,
     payload: undefined,
-    relatedStrategyPart: undefined,
+    relatedUiObject: undefined,
     dontShowAtFullscreen: undefined,
+    isEnabled: true,
+    internalClick: internalClick,
     physics: physics,
     drawBackground: drawBackground,
     drawForeground: drawForeground,
@@ -54,8 +69,19 @@ function newCircularMenuItem () {
   let defaultBackgroudColor = UI_COLOR.RED
   let backgroundColorToUse = UI_COLOR.RED
   let temporaryStatus = 0
+  let temporaryStatusCounter = 0
 
-  const EXTRA_MOUSE_OVER_ICON_SIZE = 2
+  const EXTRA_MOUSE_OVER_ICON_SIZE = 6
+
+  const STATUS_NO_ACTION_TAKEN_YET = 0
+  const STATUS_PRIMARY_ACTION_WORKING = -1
+  const STATUS_SECONDARY_ACTION_WORKING = -2
+  const STATUS_PRIMARY_WORK_DONE = -3
+  const STATUS_PRIMARY_WORK_FAILED = -4
+  const STATUS_WAITING_CONFIRMATION = -5
+  const STATUS_SECONDARY_WORK_DONE = -6
+  const STATUS_SECONDARY_WORK_FAILED = -7
+
   return thisObject
 
   function finalize () {
@@ -67,9 +93,13 @@ function newCircularMenuItem () {
     thisObject.container = undefined
     thisObject.iconOn = undefined
     thisObject.iconOff = undefined
+    thisObject.icons = undefined
     thisObject.currentIcon = undefined
     thisObject.payload = undefined
     thisObject.actionFunction = undefined
+    thisObject.actionStatus = undefined
+    thisObject.disableIfPropertyIsDefined = undefined
+    thisObject.propertyToCheckFor = undefined
   }
 
   function initialize (pPayload) {
@@ -86,10 +116,12 @@ function newCircularMenuItem () {
     } else {
       thisObject.container.frame.width = 50
     }
+
+    thisObject.nextAction = thisObject.action
   }
 
   function getContainer (point) {
-    if (thisObject.dontShowAtFullscreen === true && CURRENT_TOP_MARGIN === 0) { return }
+    if (thisObject.dontShowAtFullscreen === true && AT_FULL_SCREEN_MODE === true) { return }
 
     let container
     if (thisObject.isDeployed === true) {
@@ -102,9 +134,9 @@ function newCircularMenuItem () {
   }
 
   function physics () {
-    if (thisObject.dontShowAtFullscreen === true && CURRENT_TOP_MARGIN === 0) { return }
+    if (thisObject.dontShowAtFullscreen === true && AT_FULL_SCREEN_MODE === true) { return }
 
-    const INCREASE_STEP = 1
+    const INCREASE_STEP = 2
 
     if (Math.abs(thisObject.currentRadius - thisObject.targetRadius) >= INCREASE_STEP) {
       if (thisObject.currentRadius < thisObject.targetRadius) {
@@ -114,30 +146,84 @@ function newCircularMenuItem () {
       }
     }
 
-    thisObject.container.frame.position.x = thisObject.container.frame.radius * 3 / 7 * Math.cos(toRadians(thisObject.angle)) - thisObject.currentRadius * 1.5
-    thisObject.container.frame.position.y = thisObject.container.frame.radius * 3 / 7 * Math.sin(toRadians(thisObject.angle)) - thisObject.container.frame.height / 2
+    let radiusGrowthFactor
+    if (thisObject.type === 'Icon Only') {
+      switch (thisObject.ring) {
+        case 1: {
+          radiusGrowthFactor = 5
+          break
+        }
+        case 2: {
+          radiusGrowthFactor = 3.5
+          break
+        }
+        case 3: {
+          radiusGrowthFactor = 2
+          break
+        }
+      }
+    } else {
+      radiusGrowthFactor = 4
+    }
+
+    thisObject.container.frame.position.x = thisObject.container.frame.radius * radiusGrowthFactor / 7 * Math.cos(toRadians(thisObject.angle)) - thisObject.currentRadius * 1.5
+    thisObject.container.frame.position.y = thisObject.container.frame.radius * radiusGrowthFactor / 7 * Math.sin(toRadians(thisObject.angle)) - thisObject.container.frame.height / 2
 
     /* Temporary Status impacts on the label to use and the background of that label */
-
-    temporaryStatus--
-    if (temporaryStatus < 0) {
-      temporaryStatus = 0
+    if (temporaryStatusCounter > 0) {
+      temporaryStatusCounter--
     }
-    if (temporaryStatus === 0) {
+
+    if (temporaryStatusCounter === 0) {
+      temporaryStatus = STATUS_NO_ACTION_TAKEN_YET
       labelToPrint = thisObject.label
       backgroundColorToUse = defaultBackgroudColor
+      thisObject.nextAction = thisObject.action
     }
 
+    /* Here we will check if we need to monitor a property that influences the status of the Menu Item. */
+    if (thisObject.disableIfPropertyIsDefined === true) {
+      if (thisObject.payload.node[thisObject.propertyToCheckFor] === undefined) {
+        /* This menu item is enabled. */
+        thisObject.isEnabled = true
+      } else {
+        /* This menu item is disabled. */
+        thisObject.isEnabled = false
+      }
+    }
     iconPhysics()
   }
 
   function iconPhysics () {
-    if (thisObject.relatedStrategyPart !== undefined) {
-      thisObject.iconOn = canvas.strategySpace.iconByPartType.get(thisObject.relatedStrategyPart)
-      thisObject.iconOff = canvas.strategySpace.iconByPartType.get(thisObject.relatedStrategyPart)
+    if (
+    (
+      temporaryStatus === STATUS_PRIMARY_WORK_DONE ||
+      temporaryStatus === STATUS_SECONDARY_ACTION_WORKING ||
+      temporaryStatus === STATUS_SECONDARY_WORK_DONE ||
+      temporaryStatus === STATUS_SECONDARY_WORK_FAILED
+    ) && thisObject.secondaryAction !== undefined
+      ) {
+      thisObject.iconOn = canvas.designSpace.iconCollection.get(thisObject.secondaryIcon)
+      thisObject.iconOff = canvas.designSpace.iconCollection.get(thisObject.secondaryIcon)
     } else {
-      thisObject.iconOn = canvas.strategySpace.iconCollection.get(thisObject.iconPathOn)
-      thisObject.iconOff = canvas.strategySpace.iconCollection.get(thisObject.iconPathOff)
+      if (thisObject.relatedUiObject !== undefined) {
+        thisObject.iconOn = canvas.designSpace.iconByUiObjectType.get(thisObject.relatedUiObject)
+        thisObject.iconOff = canvas.designSpace.iconByUiObjectType.get(thisObject.relatedUiObject)
+      } else {
+        if (thisObject.iconPathOn !== undefined && thisObject.iconPathOff !== undefined) {
+          thisObject.iconOn = canvas.designSpace.iconCollection.get(thisObject.iconPathOn)
+          thisObject.iconOff = canvas.designSpace.iconCollection.get(thisObject.iconPathOff)
+        } else {
+          thisObject.iconOn = canvas.designSpace.iconCollection.get(thisObject.icons[thisObject.actionStatus()])
+          thisObject.iconOff = canvas.designSpace.iconCollection.get(thisObject.icons[thisObject.actionStatus()])
+        }
+      }
+    }
+
+    /* Current Status might be linked to some other object status */
+
+    if (thisObject.actionStatus !== undefined) {
+      thisObject.currentStatus = thisObject.actionStatus()
     }
 
     /* Current Status sets the icon to be used */
@@ -161,44 +247,136 @@ function newCircularMenuItem () {
     isMouseOver = false
   }
 
-  async function onMouseClick (event) {
-    if (temporaryStatus === 0) {
-      if (thisObject.workingLabel !== undefined) {
-        setTemporaryStatus(thisObject.workingLabel, UI_COLOR.GREY, 500)
+  function internalClick () {
+    onMouseClick()
+  }
+
+  function onMouseClick () {
+    if (thisObject.isEnabled === false) { return }
+
+    if (thisObject.label === undefined) {
+  /* This is what we have in the case of menu items that are only Icons. In this situation there is no complex logic, just execute the specified action. */
+      thisObject.actionFunction(thisObject.payload, thisObject.action, thisObject.relatedUiObject)
+      return
+    }
+
+    if (thisObject.askConfirmation !== true) { /* No confirmation is needed */
+      if (temporaryStatus === STATUS_NO_ACTION_TAKEN_YET || temporaryStatus === STATUS_PRIMARY_WORK_DONE) {
+        executeAction()
+      } // Any click out of those states is ignored
+    } else {
+ /* Confirmation is needed */
+
+      /* The first click ask for confirmation. */
+      if (temporaryStatus === STATUS_NO_ACTION_TAKEN_YET) {
+        setStatus(thisObject.confirmationLabel, UI_COLOR.GOLDEN_ORANGE, 250, STATUS_WAITING_CONFIRMATION)
+        return
+      }
+      /* A Click during confirmation executes the pre-defined action. */
+      if (temporaryStatus === STATUS_WAITING_CONFIRMATION || temporaryStatus === STATUS_PRIMARY_WORK_DONE) {
+        executeAction()
+        return
+      }
+    }
+
+    function executeAction () {
+      if (temporaryStatus === STATUS_NO_ACTION_TAKEN_YET || temporaryStatus === STATUS_WAITING_CONFIRMATION) {
+        /* We need to execute the main Action */
+        /* If there is a working label defined, we use it here. */
+        if (thisObject.workingLabel !== undefined) {
+          setStatus(thisObject.workingLabel, UI_COLOR.GREY, undefined, STATUS_PRIMARY_ACTION_WORKING) // Status will not expire, will only change with a callback. Mouse Clicks will be ignored.
+        }
+
+        /* Execute the action and wait for callbacks to update our statuus. */
+        thisObject.actionFunction(thisObject.payload, thisObject.action, thisObject.relatedUiObject, onPrimaryCallBack)
+        return
+      }
+      if (temporaryStatus === STATUS_PRIMARY_WORK_DONE && thisObject.secondaryAction !== undefined) {
+        /* We need to execute the secondary action. */
+        if (thisObject.secondaryWorkingLabel !== undefined) {
+          setStatus(thisObject.secondaryWorkingLabel, UI_COLOR.GREY, undefined, STATUS_SECONDARY_ACTION_WORKING) // Status will not expire, will only change with a callback. Mouse Clicks will be ignored.
+        }
+
+        /* Execute the action and wait for callbacks to update our statuus. */
+        thisObject.actionFunction(thisObject.payload, thisObject.secondaryAction, thisObject.relatedUiObject, onSecondaryCallBack)
+        return
       }
 
-      thisObject.currentStatus = await thisObject.actionFunction(thisObject.payload, thisObject.action)
+      function onPrimaryCallBack (err, event) {
+        /* While the primary action is being executed some event might have happen. Following we process the ones we can */
 
-      if (thisObject.currentStatus === true) {
-        if (thisObject.workDoneLabel !== undefined) {
-          setTemporaryStatus(thisObject.workDoneLabel, UI_COLOR.PATINATED_TURQUOISE, 250)
+        if (event !== undefined) {
+          if (event.type === 'Secondary Action Already Executed') {
+            setStatus(thisObject.secondaryWorkDoneLabel, UI_COLOR.PATINATED_TURQUOISE, 100, STATUS_SECONDARY_WORK_DONE)
+            return
+          }
         }
-      } else {
-        if (thisObject.workFailedLabel != undefined) {
-          setTemporaryStatus(thisObject.workFailedLabel, UI_COLOR.TITANIUM_YELLOW, 500)
+
+        /* If there is a secondary action we will act different that if there is not */
+        if (thisObject.secondaryAction === undefined) { // This means there are no more possible actions.
+          if (err.result === GLOBAL.DEFAULT_OK_RESPONSE.result) {
+            if (thisObject.workDoneLabel !== undefined) {
+              setStatus(thisObject.workDoneLabel, UI_COLOR.PATINATED_TURQUOISE, 100, STATUS_PRIMARY_WORK_DONE)
+            }
+          } else {
+            if (thisObject.workFailedLabel != undefined) {
+              setStatus(thisObject.workFailedLabel, UI_COLOR.TITANIUM_YELLOW, 100, STATUS_PRIMARY_WORK_FAILED)
+            }
+          }
+        } else {
+          if (err.result === GLOBAL.DEFAULT_OK_RESPONSE.result) {
+            if (thisObject.workDoneLabel !== undefined) {
+              thisObject.nextAction = thisObject.secondaryAction
+              setStatus(thisObject.secondaryLabel, defaultBackgroudColor, undefined, STATUS_PRIMARY_WORK_DONE)
+            }
+          } else {
+            if (thisObject.workFailedLabel != undefined) {
+              setStatus(thisObject.workFailedLabel, UI_COLOR.TITANIUM_YELLOW, 100, STATUS_PRIMARY_WORK_FAILED)
+            }
+          }
+        }
+      }
+      function onSecondaryCallBack (err) {
+        if (err.result === GLOBAL.DEFAULT_OK_RESPONSE.result) {
+          if (thisObject.secondaryWorkDoneLabel !== undefined) {
+            setStatus(thisObject.secondaryWorkDoneLabel, UI_COLOR.PATINATED_TURQUOISE, 100, STATUS_SECONDARY_WORK_DONE)
+          }
+        } else {
+          if (thisObject.secondaryWorkFailedLabel != undefined) {
+            setStatus(thisObject.secondaryWorkFailedLabel, UI_COLOR.TITANIUM_YELLOW, 100, STATUS_SECONDARY_WORK_FAILED)
+          }
         }
       }
     }
   }
 
-  function setTemporaryStatus (text, backgroundColor, waitingCycles) {
+  function setStatus (text, backgroundColor, waitingCycles, newStatus) {
     labelToPrint = text
     backgroundColorToUse = backgroundColor
-    temporaryStatus = waitingCycles
+    temporaryStatus = newStatus
+    temporaryStatusCounter = newStatus // This will often put this into negatives numbers, which will disable the counting back and automatic reseting.
+    if (waitingCycles !== undefined) { // This will override the often negative value with a positive one that will tend to zero onto the default state.
+      temporaryStatusCounter = waitingCycles
+    }
   }
 
   function drawBackground () {
-    if (thisObject.dontShowAtFullscreen === true && CURRENT_TOP_MARGIN === 0) { return }
+    if (thisObject.dontShowAtFullscreen === true && AT_FULL_SCREEN_MODE === true) { return }
 
     if (thisObject.container.frame.position.x > 0 && thisObject.isDeployed === true && thisObject.currentRadius >= thisObject.targetRadius) {
       if (thisObject.type === 'Icon & Text') {
+        let backgroundColor = backgroundColorToUse
+        if (thisObject.isEnabled === false) {
+          backgroundColor = UI_COLOR.GREY
+        }
         let params = {
           cornerRadius: 3,
           lineWidth: 0.1,
           container: thisObject.container,
           borderColor: UI_COLOR.DARK,
-          backgroundColor: backgroundColorToUse,
-          castShadow: false
+          backgroundColor: backgroundColor,
+          castShadow: false,
+          xOffset: 40
         }
 
         if (isMouseOver === true) {
@@ -213,7 +391,7 @@ function newCircularMenuItem () {
   }
 
   function drawForeground () {
-    if (thisObject.dontShowAtFullscreen === true && CURRENT_TOP_MARGIN === 0) { return }
+    if (thisObject.dontShowAtFullscreen === true && AT_FULL_SCREEN_MODE === true) { return }
 
     let menuPosition = {
       x: thisObject.currentRadius * 1.5,
@@ -231,6 +409,7 @@ function newCircularMenuItem () {
       iconSize = thisObject.currentRadius
     }
 
+    if (thisObject.icon === undefined) { return }
     if (thisObject.icon.canDrawIcon === true && thisObject.currentRadius > 1 && thisObject.isDeployed === true) {
       browserCanvasContext.drawImage(thisObject.icon, menuPosition.x - iconSize, menuPosition.y - iconSize, iconSize * 2, iconSize * 2)
 
@@ -244,7 +423,7 @@ function newCircularMenuItem () {
 
         if (thisObject.currentRadius >= thisObject.targetRadius) {
           labelPoint = {
-            x: menuPosition.x + thisObject.currentRadius + 10,
+            x: menuPosition.x + thisObject.currentRadius + 20,
             y: menuPosition.y + fontSize * FONT_ASPECT_RATIO
           }
 
@@ -256,4 +435,3 @@ function newCircularMenuItem () {
     }
   }
 }
-

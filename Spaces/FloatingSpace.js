@@ -9,12 +9,16 @@ function newFloatingSpace () {
 
   let thisObject = {
     floatingLayer: undefined,               // This is the array of floatingObjects being displayed
-    profileBalls: undefined,
-    strategyPartConstructor: undefined,
-    noteSets: undefined,
+    uiObjectConstructor: undefined,
     container: undefined,
+    oneScreenUp: oneScreenUp,
+    oneScreenDown: oneScreenDown,
+    oneScreenLeft: oneScreenLeft,
+    oneScreenRight: oneScreenRight,
+    positionAtNode: positionAtNode,
     fitIntoVisibleArea: fitIntoVisibleArea,
     isThisPointVisible: isThisPointVisible,
+    isItFar: isItFar,
     makeVisible: makeVisible,
     makeInvisible: makeInvisible,
     draw: draw,
@@ -31,36 +35,92 @@ function newFloatingSpace () {
   thisObject.container.isWheelable = true
   thisObject.container.detectMouseOver = true
   thisObject.container.frame.radius = 0
-  thisObject.container.frame.width = browserCanvas.width * 10
-  thisObject.container.frame.height = browserCanvas.height * 10
+
+  let devicePixelRatio = window.devicePixelRatio
+  const SPACE_SIZE = 50000
+
+  thisObject.container.frame.width = SPACE_SIZE
+  thisObject.container.frame.height = SPACE_SIZE
   thisObject.container.frame.position.x = browserCanvas.width / 2 - thisObject.container.frame.width / 2
   thisObject.container.frame.position.y = browserCanvas.height / 2 - thisObject.container.frame.height / 2
 
   let visible = false
 
+  const PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT = 25
+  let eventSubscriptionId
+
   return thisObject
 
   function finalize () {
+    thisObject.container.eventHandler.stopListening(eventSubscriptionId)
+
     thisObject.floatingLayer.finalize()
-    thisObject.profileBalls.finalize()
-    thisObject.strategyPartConstructor.finalize()
-    thisObject.noteSets.finalize()
+    thisObject.uiObjectConstructor.finalize()
+    thisObject.container.finalize()
+
+    thisObject.floatingLayer = undefined
+    thisObject.uiObjectConstructor = undefined
+    thisObject.container = undefined
   }
 
   function initialize (callBackFunction) {
     thisObject.floatingLayer = newFloatingLayer()
     thisObject.floatingLayer.initialize()
 
-    thisObject.profileBalls = newProfileBalls()
-    thisObject.profileBalls.initialize(thisObject.floatingLayer)
+    thisObject.uiObjectConstructor = newUiObjectConstructor()
+    thisObject.uiObjectConstructor.initialize(thisObject.floatingLayer)
 
-    thisObject.noteSets = newNoteSets()
-    thisObject.noteSets.initialize(thisObject.floatingLayer)
+    eventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onMouseWheel', onMouseWheel)
+  }
 
-    thisObject.strategyPartConstructor = newStrategyPartConstructor()
-    thisObject.strategyPartConstructor.initialize(thisObject.floatingLayer)
+  function isItFar (payload, dontCheckParent) {
+    /* If for any reason the paylaod is undefined we return false */
+    if (payload === undefined) { return false }
 
-    thisObject.container.eventHandler.listenToEvent('onMouseWheel', onMouseWheel)
+    let radarFactor = 2 // How big is the margin
+
+    /* If the chain parent is not far, they we dont consither this far. */
+    if (dontCheckParent !== true) {
+      if (payload.chainParent !== undefined) {
+        if (isItFar(payload.chainParent.payload, true) === false) { return false }
+      }
+    }
+
+    /* Exceptions that are never considered far. */
+    if (
+      payload.node.type === 'Trading System' ||
+      payload.node.type === 'Network' ||
+      payload.node.type === 'Crypto Ecosystem' ||
+      payload.node.type === 'Charting Space' ||
+      payload.node.type === 'Data Mine'
+  ) {
+      return false
+    }
+
+    /* Another exception are the ones who have reference parents */
+    if (payload.referenceParent !== undefined) { return false }
+
+    /* Here we will check the position of a floatingobject to see if it is outside the screen, with a margin of one screen around. */
+    let point = thisObject.container.frame.frameThisPoint(payload.position)
+
+    if (point.x > browserCanvas.width + browserCanvas.width * radarFactor) {
+      return true
+    }
+
+    if (point.x < 0 - browserCanvas.width * radarFactor) {
+      return true
+    }
+
+    let bottom = COCKPIT_SPACE_POSITION + COCKPIT_SPACE_HEIGHT
+    let heightDiff = browserCanvas.height - bottom
+    if (point.y < bottom - heightDiff * radarFactor) {
+      return true
+    }
+
+    if (point.y > browserCanvas.height + heightDiff * radarFactor) {
+      return true
+    }
+    return false
   }
 
   function fitIntoVisibleArea (point) {
@@ -88,6 +148,57 @@ function newFloatingSpace () {
     }
 
     return returnPoint
+  }
+
+  function oneScreenUp () {
+    let displaceVector = {
+      x: 0,
+      y: browserCanvas.height * PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT / 100
+    }
+
+    thisObject.container.displace(displaceVector)
+    return displaceVector
+  }
+
+  function oneScreenDown () {
+    let displaceVector = {
+      x: 0,
+      y: -browserCanvas.height * PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT / 100
+    }
+
+    thisObject.container.displace(displaceVector)
+    return displaceVector
+  }
+
+  function oneScreenLeft () {
+    let displaceVector = {
+      x: browserCanvas.width * PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT / 100,
+      y: 0
+    }
+
+    thisObject.container.displace(displaceVector)
+    return displaceVector
+  }
+
+  function oneScreenRight () {
+    let displaceVector = {
+      x: -browserCanvas.width * PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT / 100,
+      y: 0
+    }
+
+    thisObject.container.displace(displaceVector)
+    return displaceVector
+  }
+
+  function positionAtNode (node) {
+    let position = thisObject.container.frame.frameThisPoint(node.payload.position)
+
+    let displaceVector = {
+      x: browserCanvas.width / 2 - position.x,
+      y: (COCKPIT_SPACE_POSITION + COCKPIT_SPACE_HEIGHT) + (browserCanvas.height - (COCKPIT_SPACE_POSITION + COCKPIT_SPACE_HEIGHT)) / 2 - position.y
+    }
+
+    thisObject.container.displace(displaceVector)
   }
 
   function isThisPointVisible (point) {
@@ -126,23 +237,38 @@ function newFloatingSpace () {
     let container
 
     container = thisObject.floatingLayer.getContainer(point)
-    if (container !== undefined) { return container }
+    if (container !== undefined) {
+      container.space = 'Floating Space'
+      return container
+    }
 
     if (visible === true) {
+      thisObject.container.space = 'Floating Space'
       return thisObject.container
     }
   }
 
   function physics () {
-    thisObject.floatingLayer.physics()
+    if (visible === true) {
+      browserZoomPhysics()
+      thisObject.floatingLayer.physics()
+    }
+  }
+
+  function browserZoomPhysics () {
+    if (devicePixelRatio !== window.devicePixelRatio) {
+      devicePixelRatio = window.devicePixelRatio
+
+      thisObject.container.frame.position.x = browserCanvas.width / 2 - thisObject.container.frame.width / 2
+      thisObject.container.frame.position.y = browserCanvas.height / 2 - thisObject.container.frame.height / 2
+    }
   }
 
   function draw () {
     if (visible === true) {
       drawBackground()
+      thisObject.floatingLayer.draw()
     }
-
-    thisObject.floatingLayer.draw()
   }
 
   function drawBackground () {
@@ -155,4 +281,3 @@ function newFloatingSpace () {
     browserCanvasContext.fill()
   }
 }
-

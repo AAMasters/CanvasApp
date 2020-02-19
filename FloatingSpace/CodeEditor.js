@@ -1,6 +1,6 @@
 
 function newCodeEditor () {
-  const MODULE_NAME = 'Circular Menu Iem'
+  const MODULE_NAME = 'Code Editor'
 
   let thisObject = {
     isVisibleFunction: undefined,
@@ -61,8 +61,8 @@ function newCodeEditor () {
       }
       thisObject.iconNOT_OK.src = window.canvasApp.urlPrefix + thisObject.imagePathNOT_OK
     }
-    thisObject.iconOK.src = window.canvasApp.urlPrefix + thisObject.imagePathOK
-    thisObject.icon = thisObject.iconOK // The default value is ON.
+    // thisObject.iconOK.src = window.canvasApp.urlPrefix + thisObject.imagePathOK
+    // thisObject.icon = thisObject.iconOK // The default value is ON.
   }
 
   function deactivate () {
@@ -80,6 +80,7 @@ function newCodeEditor () {
     thisObject.rawRadius = 8
     thisObject.targetRadius = thisObject.container.frame.radius
     thisObject.currentRadius = 0
+    thisObject.payload.uiObject.setErrorMessage('', 0)
 
     let textArea = document.getElementById('textArea')
     textArea.value = payload.node.code
@@ -90,7 +91,7 @@ function newCodeEditor () {
                      'overflow:hidden;' +
                      'font-family: ' + UI_FONT.PRIMARY + ';' +
                      'font-size: 12px;' +
-                     'background-color: rgb(204, 88, 53);' +
+                     'background-color: rgb(' + UI_COLOR.RUSTED_RED + ');' +
                      'color:rgb(255, 255, 255);' +
                     'width: ' + thisObject.container.frame.width + 'px;' +
                      'height: ' + thisObject.container.frame.height + 'px'
@@ -128,12 +129,12 @@ function newCodeEditor () {
     thisObject.container.frame.position.x = 0
     thisObject.container.frame.position.y = 0
 
-    thisObject.container.frame.width = thisObject.container.frame.radius * 1.8
-    thisObject.container.frame.height = thisObject.container.frame.radius * 1
+    thisObject.container.frame.width = thisObject.container.frame.radius * 1.8 * 2
+    thisObject.container.frame.height = thisObject.container.frame.radius * 1 * 2
 
     let textAreaPosition = {
       x: 0 - thisObject.container.frame.width / 2,
-      y: 0 + thisObject.container.frame.height * 2 / 7
+      y: 0 - thisObject.container.frame.height * 3 / 7 + CURRENT_TOP_MARGIN
     }
 
     textAreaPosition = thisObject.container.frame.frameThisPoint(textAreaPosition)
@@ -161,7 +162,7 @@ function newCodeEditor () {
 
       position = thisObject.container.frame.frameThisPoint(position)
 
-      let radius = thisObject.container.frame.radius
+      let radius = thisObject.container.frame.radius * 2
 
       if (radius > 0.5) {
         browserCanvasContext.beginPath()
@@ -212,4 +213,3 @@ function newCodeEditor () {
     }
   }
 }
-

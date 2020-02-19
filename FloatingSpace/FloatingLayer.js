@@ -10,7 +10,7 @@
 
     2. Notes:         Notes are a rectangular area where some text is posted. It has a subject and a body.
 
-    3. Strategy Parts: These are small balls that represent parts of an strategy.
+    3. UI Objects: These are small balls that represent parts of an strategy.
     */
 
 function newFloatingLayer () {
@@ -75,40 +75,38 @@ function newFloatingLayer () {
       if (container !== undefined) { return container }
     }
 
+    for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+      let floatingObject = invisibleFloatingObjects[i]
+      container = floatingObject.getContainer(point)
+      if (container !== undefined) { return container }
+    }
+
     return container
   }
 
   function addFloatingObject (pFloatingObject) {
     currentHandle++
     pFloatingObject.handle = currentHandle // Math.floor((Math.random() * 10000000) + 1);
-    invisibleFloatingObjects.push(pFloatingObject)
+    visibleFloatingObjects.push(pFloatingObject)
   }
 
   function removeFloatingObject (pFloatingObjectHandle) {
-    try {
-      for (let i = 0; i < invisibleFloatingObjects.length; i++) {
-        let floatingObject = invisibleFloatingObjects[i]
+    for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+      let floatingObject = invisibleFloatingObjects[i]
 
-        if (floatingObject.handle === pFloatingObjectHandle) {
-          invisibleFloatingObjects.splice(i, 1)  // Delete item from array.
-          return
-        }
+      if (floatingObject.handle === pFloatingObjectHandle) {
+        invisibleFloatingObjects.splice(i, 1)  // Delete item from array.
+        return
       }
+    }
 
-      for (let i = 0; i < visibleFloatingObjects.length; i++) {
-        let floatingObject = visibleFloatingObjects[i]
+    for (let i = 0; i < visibleFloatingObjects.length; i++) {
+      let floatingObject = visibleFloatingObjects[i]
 
-        if (floatingObject.handle === pFloatingObjectHandle) {
-          visibleFloatingObjects.splice(i, 1)  // Delete item from array.
-          return
-        }
+      if (floatingObject.handle === pFloatingObjectHandle) {
+        visibleFloatingObjects.splice(i, 1)  // Delete item from array.
+        return
       }
-
-      if (ERROR_LOG === true) { logger.write('[ERROR] removeFloatingObject -> Floating Object Not Found.') }
-      if (ERROR_LOG === true) { logger.write('[ERROR] removeFloatingObject -> Floating Object cannot be killed.') }
-      if (ERROR_LOG === true) { logger.write('[ERROR] removeFloatingObject -> pFloatingObjectHandle = ' + pFloatingObjectHandle) }
-    } catch (err) {
-      if (ERROR_LOG === true) { logger.write('[ERROR] removeFloatingObject -> err= ' + err.stack) }
     }
   }
 
@@ -153,126 +151,77 @@ function newFloatingLayer () {
   }
 
   function draw () {
+    drawInvisibleObjects()
     drawVisibleObjects()
+  }
 
-    function drawVisibleObjects () {
-                  /* We draw all the visibleFloatingObjects. */
-
-      for (let i = 0; i < visibleFloatingObjects.length; i++) {
-        let floatingObject = visibleFloatingObjects[i]
-        floatingObject.drawBackground()
-      }
-
-      for (let i = 0; i < visibleFloatingObjects.length; i++) {
-        let floatingObject = visibleFloatingObjects[i]
-        floatingObject.drawMiddleground()
-      }
-
-      for (let i = 0; i < visibleFloatingObjects.length; i++) {
-        let floatingObject = visibleFloatingObjects[visibleFloatingObjects.length - i - 1]
-        floatingObject.drawForeground()
-      }
-
-      for (let i = 0; i < visibleFloatingObjects.length; i++) {
-        let floatingObject = visibleFloatingObjects[i]
-        floatingObject.drawOnFocus()
-      }
-
-      makeVisible()
+  function drawInvisibleObjects () {
+    for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+      let floatingObject = invisibleFloatingObjects[i]
+      floatingObject.drawBackground()
     }
 
-    function makeVisible () {
-      try {
-                  /* Now we check if any of the created FloatingObjects where enabled to run under the Physics Engine. */
+    for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+      let floatingObject = invisibleFloatingObjects[i]
+      floatingObject.drawMiddleground()
+    }
 
-        for (let i = 0; i < invisibleFloatingObjects.length; i++) {
-          let floatingObject = invisibleFloatingObjects[i]
+    for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+      let floatingObject = invisibleFloatingObjects[invisibleFloatingObjects.length - i - 1]
+      floatingObject.drawForeground()
+    }
+  }
 
-          let payload = {
-            position: undefined,
-            visible: false
-          }
+  function drawVisibleObjects () {
+    for (let i = 0; i < visibleFloatingObjects.length; i++) {
+      let floatingObject = visibleFloatingObjects[i]
+      floatingObject.drawBackground()
+    }
 
-          switch (floatingObject.type) {
+    for (let i = 0; i < visibleFloatingObjects.length; i++) {
+      let floatingObject = visibleFloatingObjects[i]
+      floatingObject.drawMiddleground()
+    }
 
-            case 'Profile Ball': {
-              payload.targetPosition = floatingObject.payload.profile.position
-              payload.visible = floatingObject.payload.profile.visible
-              break
-            }
-            case 'Note': {
-              if (floatingObject.payload.notes[floatingObject.payloadNoteIndex] !== undefined) {
-                payload.targetPosition = floatingObject.payload.notes[floatingObject.payloadNoteIndex].position
-                payload.visible = floatingObject.payload.notes[floatingObject.payloadNoteIndex].visible
-              }
-              break
-            }
-            case 'Strategy Part': {
-              payload.targetPosition = floatingObject.payload.targetPosition
-              payload.visible = floatingObject.payload.visible
-              break
-            }
-            default: {
-              break
-            }
-          }
+    for (let i = 0; i < visibleFloatingObjects.length; i++) {
+      let floatingObject = visibleFloatingObjects[visibleFloatingObjects.length - i - 1]
+      floatingObject.drawForeground()
+    }
 
-          if (payload.visible === true) {
-            visibleFloatingObjects.push(floatingObject)
+    /* Invisible objects on focus (freezed) should still have some priority */
+    for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+      let floatingObject = invisibleFloatingObjects[i]
+      floatingObject.drawOnFocus()
+    }
 
-            invisibleFloatingObjects.splice(i, 1)  // Delete item from array.
+    for (let i = 0; i < visibleFloatingObjects.length; i++) {
+      let floatingObject = visibleFloatingObjects[i]
+      floatingObject.drawOnFocus()
+    }
+  }
 
-            return                     // Only one at the time.
-          }
-        }
+  function makeVisible () {
+    for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+      let floatingObject = invisibleFloatingObjects[i]
 
+      if (floatingObject.isFrozen === false && floatingObject.isParentCollapsed === false) {
+        visibleFloatingObjects.push(floatingObject)
+        invisibleFloatingObjects.splice(i, 1)  // Delete item from array.
+        makeVisible()
+        return                     // Only one at the time.
+      }
+    }
+  }
+
+  function makeInvisible () {
+    for (let i = 0; i < visibleFloatingObjects.length; i++) {
+      let floatingObject = visibleFloatingObjects[i]
+
+      if (floatingObject.isFrozen === true || floatingObject.isParentCollapsed === true) {
+        invisibleFloatingObjects.push(floatingObject)
+        visibleFloatingObjects.splice(i, 1)  // Delete item from array.
         makeInvisible()
-      } catch (err) {
-        if (ERROR_LOG === true) { logger.write('[ERROR] physics -> makeVisible -> err= ' + err.stack) }
-      }
-    }
-
-    function makeInvisible () {
-      try {
-                  /* Finally we check if any of the currently visible floatingObjects has become invisible and must be removed from the Physics Engine. */
-
-        for (let i = 0; i < visibleFloatingObjects.length; i++) {
-          let floatingObject = visibleFloatingObjects[i]
-
-          let payload = {
-            position: undefined,
-            visible: true
-          }
-
-          switch (floatingObject.type) {
-
-            case 'Profile Ball': {
-              payload.visible = floatingObject.payload.profile.visible
-              break
-            }
-            case 'Note': {
-              payload.visible = floatingObject.payload.notes[floatingObject.payloadNoteIndex].visible
-              break
-            }
-            case 'Strategy Part': {
-              payload.visible = floatingObject.payload.visible
-              break
-            }
-            default: {
-              break
-            }
-          }
-
-          if (payload.visible === false) {
-            invisibleFloatingObjects.push(floatingObject)
-
-            visibleFloatingObjects.splice(i, 1)  // Delete item from array.
-
-            return                     // Only one at the time.
-          }
-        }
-      } catch (err) {
-        if (ERROR_LOG === true) { logger.write('[ERROR] physics -> makeInvisible -> err= ' + err.stack) }
+        return                     // Only one at the time.
       }
     }
   }
@@ -299,18 +248,35 @@ function newFloatingLayer () {
         */
 
     try {
+      makeVisible()
+      makeInvisible()
       applyPhysics()
 
       function applyPhysics () {
                 /* This function makes all the calculations to apply phisycs on all visible floatingObjects in this layer. */
 
         try {
+          for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+            let floatingObject = invisibleFloatingObjects[i]
+            floatingObject.physics()
+          }
+
           for (let i = 0; i < visibleFloatingObjects.length; i++) {
             let floatingObject = visibleFloatingObjects[i]
+            floatingObject.physics()
+
+            /* From here on, only if they are not too far. */
+            if (canvas.floatingSpace.isItFar(floatingObject.payload)) { continue }
 
             if (floatingObject.positionLocked === false) {
               floatingObject.container.frame.position.x = floatingObject.container.frame.position.x + floatingObject.currentSpeed.x
               floatingObject.container.frame.position.y = floatingObject.container.frame.position.y + floatingObject.currentSpeed.y
+            }
+
+            if (floatingObject.friction < floatingObject.targetFriction) {
+              floatingObject.friction = floatingObject.friction + 0.00001
+            } else {
+              floatingObject.friction = floatingObject.friction - 0.00001
             }
 
             floatingObject.currentSpeed.x = floatingObject.currentSpeed.x * floatingObject.friction  // Desaceleration factor.
@@ -322,19 +288,7 @@ function newFloatingLayer () {
             }
 
             switch (floatingObject.type) {
-
-              case 'Profile Ball': {
-                payload.targetPosition = floatingObject.payload.profile.position
-                payload.visible = floatingObject.payload.profile.visible
-                break
-              }
-              case 'Note': {
-                payload.targetPosition = floatingObject.payload.notes[floatingObject.payloadNoteIndex].position
-                payload.visible = floatingObject.payload.notes[floatingObject.payloadNoteIndex].visible
-
-                break
-              }
-              case 'Strategy Part': {
+              case 'UI Object': {
                 payload.targetPosition = floatingObject.payload.targetPosition
                 payload.visible = floatingObject.payload.visible
                 break
@@ -356,7 +310,7 @@ function newFloatingLayer () {
               floatingObject.currentSpeed.y = floatingObject.currentSpeed.y - 0.005
             }
 
-            const MAX_SPEED = 50
+            const MAX_SPEED = 10
 
             if (floatingObject.currentSpeed.x > MAX_SPEED) {
               floatingObject.currentSpeed.x = MAX_SPEED
@@ -376,8 +330,6 @@ function newFloatingLayer () {
 
                         // We let the Floating Object animate the physics loops by itself.
             checkBoundaries(floatingObject)
-
-            floatingObject.physics()
 
                         /* Collision Control */
 
@@ -470,9 +422,10 @@ function newFloatingLayer () {
         }
 
               /* We add the force vector to the speed vector */
-
-        floatingObject.currentSpeed.x = floatingObject.currentSpeed.x + forceVector.x
-        floatingObject.currentSpeed.y = floatingObject.currentSpeed.y + forceVector.y
+        if (isNaN(forceVector.x) === false && isNaN(forceVector.y) === false) {
+          floatingObject.currentSpeed.x = floatingObject.currentSpeed.x + forceVector.x
+          floatingObject.currentSpeed.y = floatingObject.currentSpeed.y + forceVector.y
+        }
       }
     } catch (err) {
       if (ERROR_LOG === true) { logger.write('[ERROR] gravityForce -> err= ' + err.stack) }
@@ -531,9 +484,10 @@ function newFloatingLayer () {
           }
 
                     /* We substract the force vector to the speed vector of the current floatingObject */
-
-          floatingObject1.currentSpeed.x = floatingObject1.currentSpeed.x - forceVector.x
-          floatingObject1.currentSpeed.y = floatingObject1.currentSpeed.y - forceVector.y
+          if (isNaN(forceVector.x) === false && isNaN(forceVector.y) === false) {
+            floatingObject1.currentSpeed.x = floatingObject1.currentSpeed.x - forceVector.x
+            floatingObject1.currentSpeed.y = floatingObject1.currentSpeed.y - forceVector.y
+          }
         }
       }
     } catch (err) {
@@ -593,16 +547,7 @@ function newFloatingLayer () {
         }
 
         switch (floatingObject2.type) {
-
-          case 'Profile Ball': {
-            payload.targetPosition = floatingObject2.payload.profile.position
-            break
-          }
-          case 'Note': {
-            payload.targetPosition = floatingObject2.payload.notes[floatingObject2.payloadNoteIndex].position
-            break
-          }
-          case 'Strategy Part': {
+          case 'UI Object': {
             payload.targetPosition = floatingObject2.payload.targetPosition
             break
           }
@@ -649,8 +594,10 @@ function newFloatingLayer () {
 
                   /* We substract the force vector to the speed vector of the current floatingObject */
 
-          floatingObject1.currentSpeed.x = floatingObject1.currentSpeed.x - forceVector.x
-          floatingObject1.currentSpeed.y = floatingObject1.currentSpeed.y - forceVector.y
+          if (isNaN(forceVector.x) === false && isNaN(forceVector.y) === false) {
+            floatingObject1.currentSpeed.x = floatingObject1.currentSpeed.x - forceVector.x
+            floatingObject1.currentSpeed.y = floatingObject1.currentSpeed.y - forceVector.y
+          }
         }
       }
     } catch (err) {
@@ -666,10 +613,10 @@ function newFloatingLayer () {
         pDelta = -1
       }
 
-      maxTargetRepulsionForce = maxTargetRepulsionForce + pDelta / 10000
+      maxTargetRepulsionForce = maxTargetRepulsionForce + pDelta / 1000
 
-      if (maxTargetRepulsionForce < 0.0001) {
-        maxTargetRepulsionForce = 0.0001
+      if (maxTargetRepulsionForce < 0.0000000001) {
+        maxTargetRepulsionForce = 0.0000000001
       }
     } catch (err) {
       if (ERROR_LOG === true) { logger.write('[ERROR] changeTargetRepulsion -> err= ' + err.stack) }
@@ -773,10 +720,10 @@ function newFloatingLayer () {
       pos2.x = pos2.x - minTD.x * (im2 / (im1 + im2))
       pos2.y = pos2.y - minTD.y * (im2 / (im1 + im2))
 
-      if (floatingObject1.positionLocked === false) {
+      if (floatingObject1.positionLocked === false && isNaN(pos1.x) === false && isNaN(pos1.y) === false) {
         floatingObject1.container.frame.position = pos1
       }
-      if (floatingObject2.positionLocked === false) {
+      if (floatingObject2.positionLocked === false && isNaN(pos2.x) === false && isNaN(pos2.y) === false) {
         floatingObject2.container.frame.position = pos2
       }
     } catch (err) {
@@ -784,4 +731,3 @@ function newFloatingLayer () {
     }
   }
 }
-

@@ -16,18 +16,36 @@ function newFloatingObject () {
     currentSpeed: 0,                        // This is the current speed of the floating object.
     currentMass: 0,                         // This is the current mass of the floating object, including its zoom applied.
     friction: 0,                            // This is a factor that will ultimatelly desacelerate the floating object.
+    targetFriction: 0,
     rawMass: 0,                             // This is the mass value without zoom.
     rawRadius: 0,                           // This is the radius of this floating object without zoom.
     targetRadius: 0,                        // This is the target radius of the floating object with zoom applied. It should be animated until reaching this value.
     isPinned: false,
+    isFrozen: false,
+    angleToParent: ANGLE_TO_PARENT.RANGE_90,
+    distanceToParent: DISTANCE_TO_PARENT.PARENT_100X,
+    isCollapsed: false,
+    isParentCollapsed: false,
+    frozenManually: false,
+    collapsedManually: false,
+    getPinStatus: getPinStatus,
+    getFreezeStatus: getFreezeStatus,
+    getCollapseStatus: getCollapseStatus,
+    getAngleToParent: getAngleToParent,
+    getDistanceToParent: getDistanceToParent,
     nearbyFloatingObjects: [],
+    setPosition: setPosition,
     pinToggle: pinToggle,
+    freezeToggle: freezeToggle,
+    collapseToggle: collapseToggle,
+    angleToParentToggle: angleToParentToggle,
+    distanceToParentToggle: distanceToParentToggle,
     physics: physics,
     initializeMass: initializeMass,
     initializeRadius: initializeRadius,
     initializeImageSize: initializeImageSize,
     initializeFontSize: initializeFontSize,
-    radomizeCurrentPosition: radomizeCurrentPosition,
+    initializeCurrentPosition: initializeCurrentPosition,
     radomizeCurrentSpeed: radomizeCurrentSpeed,
     drawBackground: drawBackground,
     drawMiddleground: drawMiddleground,
@@ -53,6 +71,7 @@ function newFloatingObject () {
   let selfMouseClickEventSubscriptionId
   let spaceMouseOverEventSubscriptionId
   let spaceFocusAquiredEventSubscriptionId
+  let lastParentAngle
 
   return thisObject
 
@@ -82,11 +101,12 @@ function newFloatingObject () {
 
     /* Assign a position and speed */
 
-    thisObject.radomizeCurrentPosition(thisObject.payload.targetPosition)
+    thisObject.initializeCurrentPosition(thisObject.payload.targetPosition)
     thisObject.radomizeCurrentSpeed()
   }
 
   function getContainer (point) {
+    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) { return }
     let container
 
     container = thisObject.payload.uiObject.getContainer(point)
@@ -99,6 +119,10 @@ function newFloatingObject () {
     }
   }
 
+  function getPinStatus () {
+    return thisObject.isPinned
+  }
+
   function pinToggle () {
     if (thisObject.isPinned !== true) {
       thisObject.isPinned = true
@@ -109,9 +133,216 @@ function newFloatingObject () {
     return thisObject.isPinned
   }
 
+  function getFreezeStatus () {
+    return thisObject.isFrozen
+  }
+
+  function getCollapseStatus () {
+    return thisObject.isCollapsed
+  }
+
+  function getAngleToParent () {
+    return thisObject.angleToParent
+  }
+
+  function getDistanceToParent () {
+    return thisObject.distanceToParent
+  }
+
+  function freezeToggle () {
+    if (thisObject.isFrozen !== true) {
+      thisObject.isFrozen = true
+      thisObject.frozenManually = true
+    } else {
+      thisObject.isFrozen = false
+      thisObject.frozenManually = false
+    }
+    return thisObject.isFrozen
+  }
+
+  function collapseToggle () {
+    if (thisObject.isCollapsed !== true) {
+      thisObject.isCollapsed = true
+      thisObject.collapsedManually = true
+    } else {
+      thisObject.isCollapsed = false
+      thisObject.collapsedManually = false
+    }
+    return thisObject.isCollapsed
+  }
+
+  function angleToParentToggle () {
+    switch (thisObject.angleToParent) {
+      case ANGLE_TO_PARENT.NOT_FIXED:
+        thisObject.angleToParent = ANGLE_TO_PARENT.RANGE_360
+        break
+      case ANGLE_TO_PARENT.RANGE_360:
+        thisObject.angleToParent = ANGLE_TO_PARENT.RANGE_180
+        break
+      case ANGLE_TO_PARENT.RANGE_180:
+        thisObject.angleToParent = ANGLE_TO_PARENT.RANGE_90
+        break
+      case ANGLE_TO_PARENT.RANGE_90:
+        thisObject.angleToParent = ANGLE_TO_PARENT.RANGE_45
+        break
+      case ANGLE_TO_PARENT.RANGE_45:
+        thisObject.angleToParent = ANGLE_TO_PARENT.NOT_FIXED
+        break
+    }
+
+    return thisObject.angleToParent
+  }
+
+  function distanceToParentToggle () {
+    switch (thisObject.distanceToParent) {
+      case DISTANCE_TO_PARENT.NOT_FIXED:
+        thisObject.distanceToParent = DISTANCE_TO_PARENT.PARENT_025X
+        break
+      case DISTANCE_TO_PARENT.PARENT_025X:
+        thisObject.distanceToParent = DISTANCE_TO_PARENT.PARENT_050X
+        break
+      case DISTANCE_TO_PARENT.PARENT_050X:
+        thisObject.distanceToParent = DISTANCE_TO_PARENT.PARENT_100X
+        break
+      case DISTANCE_TO_PARENT.PARENT_100X:
+        thisObject.distanceToParent = DISTANCE_TO_PARENT.PARENT_150X
+        break
+      case DISTANCE_TO_PARENT.PARENT_150X:
+        thisObject.distanceToParent = DISTANCE_TO_PARENT.PARENT_200X
+        break
+      case DISTANCE_TO_PARENT.PARENT_200X:
+        thisObject.distanceToParent = DISTANCE_TO_PARENT.NOT_FIXED
+        break
+    }
+
+    return thisObject.distanceToParent
+  }
+
   function physics () {
+    collapsePhysics()
+    frozenPhysics()
+    /* From here on, only if they are not too far. */
+    if (canvas.floatingSpace.isItFar(thisObject.payload)) { return }
     thisObjectPhysics()
     thisObject.payload.uiObject.physics()
+    positionContraintsPhysics()
+  }
+
+  function frozenPhysics () {
+    if (thisObject.frozenManually !== false) { return }
+    if (thisObject.payload === undefined) { return }
+    let parent = thisObject.payload.chainParent
+    if (parent !== undefined) {
+      if (parent.payload !== undefined) {
+        if (parent.payload.floatingObject !== undefined) {
+          thisObject.isFrozen = parent.payload.floatingObject.isFrozen
+        }
+      }
+    }
+  }
+
+  function collapsePhysics () {
+    let parent = thisObject.payload.chainParent
+    if (parent === undefined) { return }
+    if (parent.payload === undefined) { return }
+    if (parent.payload.floatingObject === undefined) { return }
+
+    thisObject.isParentCollapsed = parent.payload.floatingObject.isCollapsed
+    if (thisObject.collapsedManually === false) {
+      thisObject.isCollapsed = parent.payload.floatingObject.isCollapsed
+    }
+  }
+
+  function positionContraintsPhysics () {
+    if (thisObject.angleToParent !== ANGLE_TO_PARENT.NOT_FIXED && thisObject.isOnFocus !== true) {
+      let parent = thisObject.payload.chainParent
+      if (parent === undefined) { return }
+      if (parent.payload === undefined) { return }
+      if (parent.payload.position === undefined) { return }
+
+      let distanceToParent = Math.sqrt(Math.pow(parent.payload.position.x - thisObject.container.frame.position.x, 2) + Math.pow(parent.payload.position.y - thisObject.container.frame.position.y, 2))  // ... we calculate the distance ...
+      let parentChildren = canvas.designSpace.workspace.nodeChildren.childrenCount(parent, thisObject.payload.node)
+      let axisCount = parentChildren.childrenCount
+      let axisIndex = parentChildren.childIndex
+      let baseAngle = 0
+      let angleToParentAngle
+
+      if (parent.payload.distance !== undefined) {
+        switch (thisObject.distanceToParent) {
+          case DISTANCE_TO_PARENT.PARENT_025X:
+            distanceToParent = parent.payload.distance / 4
+            break
+          case DISTANCE_TO_PARENT.PARENT_050X:
+            distanceToParent = parent.payload.distance / 2
+            break
+          case DISTANCE_TO_PARENT.PARENT_100X:
+            distanceToParent = parent.payload.distance
+            break
+          case DISTANCE_TO_PARENT.PARENT_150X:
+            distanceToParent = parent.payload.distance * 1.5
+            break
+          case DISTANCE_TO_PARENT.PARENT_200X:
+            distanceToParent = parent.payload.distance * 2
+            break
+        }
+      }
+
+      switch (thisObject.angleToParent) {
+        case ANGLE_TO_PARENT.RANGE_360:
+          angleToParentAngle = 360
+          break
+        case ANGLE_TO_PARENT.RANGE_180:
+          angleToParentAngle = 180
+          break
+        case ANGLE_TO_PARENT.RANGE_90:
+          angleToParentAngle = 90
+          break
+        case ANGLE_TO_PARENT.RANGE_45:
+          angleToParentAngle = 45
+          break
+      }
+
+      if (axisIndex === undefined) {
+        axisCount = 1
+        axisIndex = axisCount
+      }
+
+      if (parent.payload.chainParent !== undefined && parent.payload.angle !== undefined) {
+        axisCount++
+        axisIndex++
+        baseAngle = parent.payload.angle + 180
+        lastParentAngle = parent.payload.angle
+      } else {
+        if (lastParentAngle !== undefined) {
+          axisCount++
+          axisIndex++
+          baseAngle = lastParentAngle + 180
+        }
+      }
+
+      let separatorAngle = (360 - angleToParentAngle) / 2
+      let angleStep = angleToParentAngle / axisCount
+
+      thisObject.payload.angle = baseAngle + separatorAngle + (axisIndex - 1) * angleStep
+      if (thisObject.payload.angle >= 360) {
+        thisObject.payload.angle = thisObject.payload.angle - 360
+      }
+
+      thisObject.payload.distance = distanceToParent
+
+      if (distanceToParent > 2000 || thisObject.isPinned === true) { return } // this is introduced to avoid edges cases when importing workspaces.
+
+      newPosition = {
+        x: parent.payload.position.x + distanceToParent * Math.cos(toRadians(thisObject.payload.angle)),
+        y: parent.payload.position.y + distanceToParent * Math.sin(toRadians(thisObject.payload.angle))
+      }
+      if (isNaN(newPosition.x) === false) {
+        thisObject.container.frame.position.x = newPosition.x
+      }
+      if (isNaN(newPosition.y) === false) {
+        thisObject.container.frame.position.y = newPosition.y
+      }
+    }
   }
 
   function thisObjectPhysics () {
@@ -172,12 +403,19 @@ function newFloatingObject () {
   }
 
   function someoneAquiredFocus (container) {
+    if (container === undefined) {
+      return
+    }
+    if (thisObject.container === undefined) {
+      return
+    }
     if (container.id !== thisObject.container.id) {
       removeFocus()
     }
   }
 
   function removeFocus () {
+    if (thisObject.payload === undefined) { return }
     if (thisObject.isOnFocus === true) {
       thisObject.targetRadius = thisObject.rawRadius * 1
       thisObject.targetImageSize = thisObject.rawImageSize * 1
@@ -201,14 +439,20 @@ function newFloatingObject () {
   }
 
   function drawBackground () {
+    if (canvas.floatingSpace.isItFar(thisObject.payload)) { return }
+    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) { return }
     thisObject.payload.uiObject.drawBackground()
   }
 
   function drawMiddleground () {
+    if (canvas.floatingSpace.isItFar(thisObject.payload)) { return }
+    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) { return }
     thisObject.payload.uiObject.drawMiddleground()
   }
 
   function drawForeground () {
+    if (canvas.floatingSpace.isItFar(thisObject.payload)) { return }
+    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) { return }
     thisObject.payload.uiObject.drawForeground()
   }
 
@@ -261,14 +505,25 @@ function newFloatingObject () {
     thisObject.currentFontSize = size / 3
   }
 
-  function radomizeCurrentPosition (arroundPoint) {
-    let position = {
-      x: Math.floor((Math.random() * (200) - 100)) + arroundPoint.x,
-      y: Math.floor((Math.random() * (200) - 100)) + arroundPoint.y
+  function initializeCurrentPosition (arroundPoint) {
+    let position = {}
+
+    if (thisObject.payload.position === undefined) {
+      position = {
+        x: Math.floor((Math.random() * (200) - 100)) + arroundPoint.x,
+        y: Math.floor((Math.random() * (200) - 100)) + arroundPoint.y
+      }
+    } else {
+      position = {
+        x: thisObject.payload.position.x,
+        y: thisObject.payload.position.y
+      }
     }
 
-    // thisObject.container.frame.position = thisObject.container.frame.frameThisPoint(position)
+    setPosition(position)
+  }
 
+  function setPosition (position) {
     thisObject.container.frame.position.x = position.x
     thisObject.container.frame.position.y = position.y
 
@@ -309,4 +564,3 @@ function newFloatingObject () {
   function updateRadius () {
   }
 }
-

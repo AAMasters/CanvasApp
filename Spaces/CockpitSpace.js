@@ -6,10 +6,12 @@
      container: undefined,
      status: 'BOTTOM',
      assetBalances: undefined,
-     restartSimulation: undefined,
      fullscreen: undefined,
      toTop: toTop,
      toBottom: toBottom,
+     toMiddle: toMiddle,
+     moveUp: moveUp,
+     moveDown: moveDown,
      draw: draw,
      physics: physics,
      getContainer: getContainer,
@@ -39,7 +41,6 @@
      thisObject.container.finalize()
      thisObject.container = undefined
      thisObject.assetBalances = undefined
-     thisObject.restartSimulation = undefined
      thisObject.fullscreen = undefined
    }
 
@@ -47,22 +48,25 @@
      thisObject.container.frame.position.x = 0
 
      let INITIAL_POSITION
-     if (canvas.strategySpace.isInitialized === true) {
-       INITIAL_POSITION = 55
+     if (canvas.designSpace.workspace.enabled === true) {
+       let localStorage = window.localStorage.getItem(MODULE_NAME)
+       if (localStorage !== null) {
+         storage = JSON.parse(localStorage)
+         thisObject.container.frame.position.y = storage.spacePosition
+       } else {
+         INITIAL_POSITION = 55
+         thisObject.container.frame.position.y = browserCanvas.height * INITIAL_POSITION / 100 - COCKPIT_SPACE_HEIGHT
+       }
      } else {
        INITIAL_POSITION = 100
+       thisObject.container.frame.position.y = browserCanvas.height * INITIAL_POSITION / 100 - COCKPIT_SPACE_HEIGHT
      }
-     thisObject.container.frame.position.y = browserCanvas.height * INITIAL_POSITION / 100 - COCKPIT_SPACE_HEIGHT
 
-     canvasBrowserResizedEventSubscriptionId = window.canvasApp.eventHandler.listenToEvent('Browser Resized', resize)
+     canvasBrowserResizedEventSubscriptionId = canvas.eventHandler.listenToEvent('Browser Resized', resize)
      selfMouseClickEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onMouseClick', onMouseClick)
 
-     thisObject.assetBalances = newAssetBalances()
+     thisObject.assetBalances = newQuotedAssetalances()
      thisObject.assetBalances.initialize()
-
-     thisObject.restartSimulation = newRestartSimulation()
-     thisObject.restartSimulation.container.connectToParent(thisObject.container)
-     thisObject.restartSimulation.initialize()
 
      thisObject.fullscreen = newFullScreen()
      thisObject.fullscreen.container.connectToParent(thisObject.container)
@@ -76,14 +80,43 @@
    function resize () {
      thisObject.container.frame.width = browserCanvas.width
      thisObject.container.frame.height = COCKPIT_SPACE_HEIGHT
+
+     switch (thisObject.status) {
+       case 'BOTTOM': {
+         thisObject.container.frame.position.y = browserCanvas.height - COCKPIT_SPACE_HEIGHT
+         break
+       }
+       case 'TOP': {
+         thisObject.container.frame.position.y = TOP_SPACE_HEIGHT
+         break
+       }
+     }
    }
 
    function toTop () {
-     thisObject.container.frame.position.y = 0
+     thisObject.container.frame.position.y = COCKPIT_SPACE_HEIGHT
    }
 
    function toBottom () {
      thisObject.container.frame.position.y = browserCanvas.height - COCKPIT_SPACE_HEIGHT
+   }
+
+   function toMiddle () {
+     thisObject.container.frame.position.y = browserCanvas.height / 2 - COCKPIT_SPACE_HEIGHT
+   }
+
+   function moveUp () {
+     thisObject.container.frame.position.y = thisObject.container.frame.position.y - COCKPIT_SPACE_HEIGHT * 2
+     if (thisObject.container.frame.position.y < 0) {
+       thisObject.container.frame.position.y = 0
+     }
+   }
+
+   function moveDown () {
+     thisObject.container.frame.position.y = thisObject.container.frame.position.y + COCKPIT_SPACE_HEIGHT * 2
+     if (thisObject.container.frame.position.y > browserCanvas.height - COCKPIT_SPACE_HEIGHT) {
+       thisObject.container.frame.position.y = browserCanvas.height - COCKPIT_SPACE_HEIGHT
+     }
    }
 
    function physics () {
@@ -92,7 +125,6 @@
    }
 
    function childrenPhysics () {
-     thisObject.restartSimulation.physics()
      thisObject.fullscreen.physics()
    }
    function thisObjectPhysics () {
@@ -100,8 +132,7 @@
 
      thisObject.status = 'MIDDLE'
 
-     let user = window.localStorage.getItem(LOGGED_IN_USER_LOCAL_STORAGE_KEY)
-     if (user !== null) { // Only if user is logged in
+     if (canvas.designSpace.workspace.enabled === true) {
        thisObject.container.isDraggeable = true
      } else {
        thisObject.container.isDraggeable = false
@@ -110,13 +141,15 @@
      if (thisObject.container.frame.position.y > browserCanvas.height * 99.5 / 100 - COCKPIT_SPACE_HEIGHT) {
        thisObject.container.frame.position.y = browserCanvas.height - COCKPIT_SPACE_HEIGHT
        thisObject.status = 'BOTTOM'
-       canvas.strategySpace.makeInvisible()
+       canvas.designSpace.makeInvisible()
+       canvas.floatingSpace.makeInvisible()
      } else {
-       canvas.strategySpace.makeVisible()
+       canvas.designSpace.makeVisible()
+       canvas.floatingSpace.makeVisible()
      }
 
-     if (thisObject.container.frame.position.y < browserCanvas.height * 0.5 / 100) {
-       thisObject.container.frame.position.y = 0
+     if (thisObject.container.frame.position.y < browserCanvas.height * 0.5 / 100 + TOP_SPACE_HEIGHT) {
+       thisObject.container.frame.position.y = TOP_SPACE_HEIGHT
        thisObject.status = 'TOP'
        canvas.panelsSpace.visible = false
      } else {
@@ -124,19 +157,23 @@
      }
 
      COCKPIT_SPACE_POSITION = thisObject.container.frame.position.y
-     viewPort.resize()
+     let storage = {
+       spacePosition: COCKPIT_SPACE_POSITION
+     }
+     window.localStorage.setItem(MODULE_NAME, JSON.stringify(storage))
+     if (canvas.chartingSpace.viewport !== undefined) {
+       canvas.chartingSpace.viewport.resize()
+     }
    }
 
    function getContainer (point) {
      let container
 
-     container = thisObject.restartSimulation.getContainer(point)
-     if (container !== undefined) { return container }
-
-     container = thisObject.fullscreen.getContainer(point)
-     if (container !== undefined) { return container }
+     // container = thisObject.fullscreen.getContainer(point)
+     // if (container !== undefined) { return container }
 
      if (thisObject.container.frame.isThisPointHere(point, true) === true) {
+       thisObject.container.space = 'Cockpit Space'
        return thisObject.container
      } else {
        return undefined
@@ -149,8 +186,7 @@
      drawBackground()
 
      thisObject.assetBalances.draw()
-     thisObject.restartSimulation.draw()
-     thisObject.fullscreen.draw()
+     // thisObject.fullscreen.draw()
    }
 
    function drawBackground () {
@@ -161,7 +197,7 @@
        y: 0
      }
 
-     const RED_LINE_HIGHT = 5
+     const RED_LINE_HIGHT = 2
 
      zeroPoint = thisObject.container.frame.frameThisPoint(zeroPoint)
 
@@ -183,8 +219,7 @@
      browserCanvasContext.closePath()
      browserCanvasContext.fill()
 
-     let user = window.localStorage.getItem(LOGGED_IN_USER_LOCAL_STORAGE_KEY)
-     if (user !== null) { // Only if user is logged in
+     if (canvas.designSpace.workspace.enabled === true) {
        arrow()
      }
    }

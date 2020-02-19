@@ -3,60 +3,54 @@ function newTopSpace () {
   let thisObject = {
     container: undefined,
     draw: draw,
-    getContainer: getContainer,     // returns the inner most container that holds the point received by parameter.
-    endUser: undefined,
-    currentEvent: undefined,
-    login: undefined,
+    getContainer: getContainer,
     initialize: initialize
   }
 
-  var container = newContainer()
-  container.initialize()
-  thisObject.container = container
+  thisObject.container = newContainer()
+  thisObject.container.initialize()
 
   resize()
 
-  container.isDraggeable = false
-
+  thisObject.container.isDraggeable = false
+  let backgroundImage
+  let logoImage
   return thisObject
 
-  async function initialize () {
-    let sharedStatus = {
-      currentDevTeamIndex: 0,
-      currentEventIndex: 0,
-      currentUserBotIndex: 0,
-      currentProcessIndex: 0,
-      currentBotType: '',
-      eventHandler: newEventHandler()
+  function initialize () {
+    canvas.eventHandler.listenToEvent('Browser Resized', resize)
+
+    backgroundImage = new Image()
+    logoImage = new Image()
+
+    loadImage('superalgos-header-background', backgroundImage)
+    loadImage('superalgos-logo-for-color-background', logoImage)
+
+    function loadImage (name, image) {
+      const PATH = 'Images/'
+
+      image.onload = onImageLoad
+      image.fileName = name
+
+      function onImageLoad () {
+        image.canDraw = true
+      }
+      image.src = window.canvasApp.urlPrefix + PATH + name + '.png'
     }
-
-    thisObject.login = newLogin()
-    await thisObject.login.initialize(sharedStatus)
-
-    window.canvasApp.eventHandler.listenToEvent('Browser Resized', resize)
   }
 
   function resize () {
     thisObject.container.frame.width = browserCanvas.width
     thisObject.container.frame.height = TOP_SPACE_HEIGHT
 
-    container.frame.position.x = 0
-    container.frame.position.y = viewPort.visibleArea.bottomLeft.y
+    thisObject.container.frame.position.x = 0
+    try {
+      thisObject.container.frame.position.y = canvas.chartingSpace.viewport.visibleArea.bottomLeft.y
+    } catch (e) { }
   }
 
   function getContainer (point) {
-    let container
-    return
 
-    container = thisObject.currentEvent.getContainer(point)
-    if (container !== undefined) { return container }
-
-    container = thisObject.login.getContainer(point)
-    if (container !== undefined) { return container }
-
-        /* The point does not belong to any inner container, so we return the current container. */
-
-    return thisObject.container
   }
 
   function draw () {
@@ -64,22 +58,51 @@ function newTopSpace () {
 
     drawBackground()
     return
-
-    thisObject.endUser.draw()
-    thisObject.currentEvent.draw()
-    thisObject.login.draw()
   }
 
   function drawBackground () {
+    /* Solid Color */
     let opacity = 1
-
     browserCanvasContext.beginPath()
-
     browserCanvasContext.rect(0, 0, thisObject.container.frame.width, thisObject.container.frame.height)
-    browserCanvasContext.fillStyle = 'rgba(' + UI_COLOR.RUSTED_RED + ', ' + opacity + ')'
-
+    if (areWeRecording === true) {
+      browserCanvasContext.fillStyle = 'rgba(' + UI_COLOR.PATINATED_TURQUOISE + ', ' + opacity + ')'
+    } else {
+      browserCanvasContext.fillStyle = 'rgba(' + UI_COLOR.RUSTED_RED + ', ' + opacity + ')'
+    }
     browserCanvasContext.closePath()
-
     browserCanvasContext.fill()
+
+    /* Background Image */
+    if (backgroundImage !== undefined) {
+      if (backgroundImage.canDraw === true) {
+        let imagePosition = {
+          x: 0,
+          y: 0
+        }
+
+        browserCanvasContext.drawImage(
+          backgroundImage, imagePosition.x,
+          imagePosition.y,
+          browserCanvas.width,
+          TOP_SPACE_HEIGHT - 2)
+      }
+    }
+
+    /* Logo Image */
+    if (logoImage !== undefined) {
+      if (logoImage.canDraw === true) {
+        let imagePosition = {
+          x: 10,
+          y: 0
+        }
+
+        browserCanvasContext.drawImage(
+          logoImage, imagePosition.x,
+          imagePosition.y,
+          150,
+          TOP_SPACE_HEIGHT - 2)
+      }
+    }
   }
 }

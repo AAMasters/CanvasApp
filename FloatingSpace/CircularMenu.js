@@ -5,6 +5,7 @@ function newCircularMenu () {
   let thisObject = {
     container: undefined,
     isDeployed: undefined,
+    internalClick: internalClick,
     physics: physics,
     drawBackground: drawBackground,
     drawForeground: drawForeground,
@@ -46,16 +47,27 @@ function newCircularMenu () {
   function initialize (menuItemsInitialValues, payload) {
 /* Create the array of Menu Items */
 
+    let iconAndTextArray = []
+    let iconOnlyArray
+    let ringsArray = [[], [], []]
+
     for (let i = 0; i < menuItemsInitialValues.length; i++) {
       let menuItem = newCircularMenuItem()
       let menuItemInitialValue = menuItemsInitialValues[i]
 
       menuItem.action = menuItemInitialValue.action
       menuItem.actionFunction = menuItemInitialValue.actionFunction
+      menuItem.actionStatus = menuItemInitialValue.actionStatus
       menuItem.label = menuItemInitialValue.label
       menuItem.workingLabel = menuItemInitialValue.workingLabel
       menuItem.workDoneLabel = menuItemInitialValue.workDoneLabel
       menuItem.workFailedLabel = menuItemInitialValue.workFailedLabel
+      menuItem.secondaryAction = menuItemInitialValue.secondaryAction
+      menuItem.secondaryLabel = menuItemInitialValue.secondaryLabel
+      menuItem.secondaryWorkingLabel = menuItemInitialValue.secondaryWorkingLabel
+      menuItem.secondaryWorkDoneLabel = menuItemInitialValue.secondaryWorkDoneLabel
+      menuItem.secondaryWorkFailedLabel = menuItemInitialValue.secondaryWorkFailedLabel
+      menuItem.secondaryIcon = menuItemInitialValue.secondaryIcon
       menuItem.visible = menuItemInitialValue.visible
       menuItem.iconPathOn = menuItemInitialValue.iconPathOn
       menuItem.iconPathOff = menuItemInitialValue.iconPathOff
@@ -64,13 +76,26 @@ function newCircularMenu () {
       menuItem.currentRadius = menuItemInitialValue.currentRadius
       menuItem.angle = menuItemInitialValue.angle
       menuItem.currentStatus = menuItemInitialValue.currentStatus
-      menuItem.relatedStrategyPart = menuItemInitialValue.relatedStrategyPart
+      menuItem.relatedUiObject = menuItemInitialValue.relatedUiObject
       menuItem.dontShowAtFullscreen = menuItemInitialValue.dontShowAtFullscreen
+      menuItem.askConfirmation = menuItemInitialValue.askConfirmation
+      menuItem.confirmationLabel = menuItemInitialValue.confirmationLabel
+      menuItem.disableIfPropertyIsDefined = menuItemInitialValue.disableIfPropertyIsDefined
+      menuItem.propertyToCheckFor = menuItemInitialValue.propertyToCheckFor
+      menuItem.ring = menuItemInitialValue.ring
+      menuItem.icons = menuItemInitialValue.icons
 
       if (menuItem.label === undefined) {
         menuItem.type = 'Icon Only'
+
+        if (menuItem.ring === undefined) {
+          menutItem.ring = 1
+        }
+        iconOnlyArray = ringsArray[menuItem.ring - 1]
+        iconOnlyArray.push(menuItem)
       } else {
         menuItem.type = 'Icon & Text'
+        iconAndTextArray.push(menuItem)
       }
 
       menuItem.initialize(payload)
@@ -78,6 +103,42 @@ function newCircularMenu () {
       menuItems.push(menuItem)
     }
 
+    /* There are 3 possible rings of icons, we will go through each of them here. */
+    let amplitudeArray = [80, 50, 40]
+    let initialAngleArray = [220, 205, 200]
+    for (let j = 1; j < 4; j++) {
+      let iconOnlyArray = ringsArray[j - 1]
+      /* Here we calculate the angles for each menu item, and then apply it if it was not previously defined. */
+      let amplitude = amplitudeArray[j - 1]
+      let initialAngle = initialAngleArray[j - 1]
+      let step = amplitude / (iconOnlyArray.length - 1)
+
+      for (let i = 0; i < iconOnlyArray.length; i++) {
+        let menuItem = iconOnlyArray[i]
+        let angle = initialAngle - step * i
+        if (menuItem.angle === undefined) {
+          menuItem.angle = angle
+        }
+      }
+    }
+    /* Text and Icon */
+    let amplitude = 140
+    let initialAngle = -70
+    step = amplitude / 7
+    let currentItem = (7 - iconAndTextArray.length) / 2 + 1
+    for (let i = 0; i < iconAndTextArray.length; i++) {
+      let menuItem = iconAndTextArray[i]
+      let angle = initialAngle + step * (currentItem - 0.5)
+      currentItem++
+      if (menuItem.angle === undefined) {
+        menuItem.angle = angle
+      }
+    }
+
+    iconOnlyArray = undefined
+    iconAndTextArray = undefined
+
+    /* Listen to events */
     selfFocusEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onFocus', onFocus)
     selfNotFocuskEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onNotFocus', onNotFocus)
   }
@@ -87,49 +148,66 @@ function newCircularMenu () {
 
     if (thisObject.isDeployed === true) {
       for (let i = 0; i < menuItems.length; i++) {
-        let menutItem = menuItems[i]
-        container = menutItem.getContainer(point)
+        let menuItem = menuItems[i]
+        if (menuItem.visible === true) {
+          container = menuItem.getContainer(point)
+        }
         if (container !== undefined) { return container }
+      }
+    }
+  }
+
+  function internalClick (action) {
+    for (let i = 0; i < menuItems.length; i++) {
+      let menuItem = menuItems[i]
+      if (menuItem.visible === true) {
+        if (menuItem.nextAction === action) {
+          menuItem.internalClick()
+        }
       }
     }
   }
 
   function physics () {
     for (let i = 0; i < menuItems.length; i++) {
-      let menutItem = menuItems[i]
-      menutItem.physics()
+      let menuItem = menuItems[i]
+      menuItem.physics()
     }
   }
 
   function onFocus () {
     for (let i = 0; i < menuItems.length; i++) {
-      let menutItem = menuItems[i]
-      menutItem.targetRadius = menutItem.rawRadius * 1.5
-      menutItem.isDeployed = true
+      let menuItem = menuItems[i]
+      menuItem.targetRadius = menuItem.rawRadius * 1.5
+      menuItem.isDeployed = true
     }
     thisObject.isDeployed = true
   }
 
   function onNotFocus () {
     for (let i = 0; i < menuItems.length; i++) {
-      let menutItem = menuItems[i]
-      menutItem.targetRadius = menutItem.rawRadius * 0 - i * 5
-      menutItem.isDeployed = false
+      let menuItem = menuItems[i]
+      menuItem.targetRadius = menuItem.rawRadius * 0 - i * 4
+      menuItem.isDeployed = false
     }
     thisObject.isDeployed = false
   }
 
   function drawBackground (pFloatingObject) {
     for (let i = 0; i < menuItems.length; i++) {
-      let menutItem = menuItems[i]
-      menutItem.drawBackground()
+      let menuItem = menuItems[i]
+      if (menuItem.visible === true) {
+        menuItem.drawBackground()
+      }
     }
   }
 
   function drawForeground (pFloatingObject) {
     for (let i = 0; i < menuItems.length; i++) {
-      let menutItem = menuItems[i]
-      menutItem.drawForeground()
+      let menuItem = menuItems[i]
+      if (menuItem.visible === true) {
+        menuItem.drawForeground()
+      }
     }
   }
 }

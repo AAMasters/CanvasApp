@@ -25,14 +25,20 @@ function newAnimation () {
     finalize: finalize
   }
 
+  let totalConsumption = 0
+  let totalCounter = 0
+  let pointerIcon
+  let videoRecorder
   return thisObject
 
   function finalize () {
     thisObject.stop()
+    pointerIcon = undefined
+    videoRecorder = undefined
   }
 
   function initialize () {
-
+    videoRecorder = newVideoRecorder()
   }
 
   function start () {
@@ -54,32 +60,101 @@ function newAnimation () {
   function animationLoop () {
     try {
       if (window.canvasApp.visible === true) {
-                /* We set the canvas to its normal width and height */
-
+        /* We set the canvas to its normal width and height */
         browserCanvas.width = window.innerWidth
         browserCanvas.height = window.innerHeight - CURRENT_TOP_MARGIN
 
-                /* First thing is to clear the actual canvas */
+        /* First thing is to clear the actual canvas */
+        // clearBrowserCanvas()
 
-        clearBrowserCanvas()
+        /* We loop through the callback functions collections and execute them all. */
+        let performanceMap = new Map()
+        let totalTimeConsumed = 0
+        let totalElements = 0
+        let chanceToExecute
+        let randomNumber
+        let mustExecute
 
-                /* Let reset the current chart that is on focus */
+        // console.clear()
+        let row = 0
+        for (const [key, callBackFunction] of callBackFunctions.entries()) {
+          row++
+          switch (key) {
+            case 'Floating Space Physics':
+              chanceToExecute = 50
+              randomNumber = Math.random() * 100 * chanceToExecute
+              if (randomNumber > 100 - chanceToExecute) { mustExecute = true } else { mustExecute = false }
+              break
+            default: {
+              mustExecute = true
+            }
 
-        window.CHART_ON_FOCUS = ''
+          }
+          let timeConsumed = 0
+          if (mustExecute === true) {
+            let t0 = performance.now()
+            callBackFunction()
+            let t1 = performance.now()
+            timeConsumed = t1 - t0
+            if (key === 'Charting Space Draw') {
+              if (Math.random() * 100 > 99) {
+                totalConsumption = 0
+                totalCounter = 0
+              }
 
-                /* We loop through the callback functions collections and execute them all. */
+              totalConsumption = totalConsumption + timeConsumed
+              totalCounter = totalCounter + 1
+            }
+            performanceMap.set(key, timeConsumed)
+            totalTimeConsumed = totalTimeConsumed + timeConsumed
+            totalElements++
+          }
+        }
 
-        callBackFunctions.forEach(function (callBackFunction) {
-          callBackFunction()
-        })
+        /* Performance Check */
+        if (SHOW_ANIMATION_PERFORMACE === true) {
+          row = 0
+          for (const [key, timeConsumed] of performanceMap.entries()) {
+            row++
+            labelToPrint = key + '   ' + timeConsumed.toFixed(4)
+            printLabel(labelToPrint, 10, 100 + row * 30, 1, 20, UI_COLOR.RED)
+            let percentage = timeConsumed * 100 / totalTimeConsumed
+            labelToPrint = key + '   ' + percentage.toFixed(1) + '%'
+            printLabel(labelToPrint, 300, 100 + row * 30, 1, 20, UI_COLOR.RED)
+          }
+
+          /* Other Variables */
+          row++
+          printLabel(DEBUG.variable1, 300, 100 + row * 30, 1, 20, UI_COLOR.RED)
+          row++
+          printLabel(DEBUG.variable2, 300, 100 + row * 30, 1, 20, UI_COLOR.RED)
+          row++
+          printLabel(DEBUG.variable3, 300, 100 + row * 30, 1, 20, UI_COLOR.RED)
+          row++
+          printLabel(DEBUG.variable4, 300, 100 + row * 30, 1, 20, UI_COLOR.RED)
+        }
       } else {
         browserCanvas.width = 1
         browserCanvas.height = 1
       }
 
-            /* We request the next frame to be drawn, and stablishing a loop */
+      /* Media Recording */
+      if (areWeRecording === true) {
+        videoRecorder.recordCanvas()
+      }
 
+      /* We request the next frame to be drawn, and stablishing a loop */
+
+      /* Use this code for full animation speed. */
       animationLoopHandle = window.requestAnimationFrame(animationLoop)
+
+      /* Use this code for max 10 frames per second animation speed, if the app is consumming too much of your CPU.  */
+      /*
+      setTimeout(nextLoop, 100)
+      function nextLoop () {
+        animationLoopHandle = window.requestAnimationFrame(animationLoop)
+      }
+      */
     } catch (err) {
       if (ERROR_LOG === true) { logger.write('[ERROR] animationLoop -> err = ' + err.stack) }
     }

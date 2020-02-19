@@ -8,6 +8,7 @@ function newFrame () {
     containerName: '',                  // This is for debugging purposes only.
     parentFrame: undefined,             // Here we store the parent cointainer zoom object.
     radius: 0,
+    offset: undefined,
     position: undefined,
     container: undefined,
     width: browserCanvas.width,
@@ -20,21 +21,30 @@ function newFrame () {
     isThisPointHere: isThisPointHere,   // This function return true is the point received as parameter lives within this frame.
     isThisScreenPointHere: isThisScreenPointHere,
     isInViewPort: isInViewPort,
-    canYouMoveHere: canYouMoveHere,
-    initialize: initialize
+    initialize: initialize,
+    finalize: finalize
   }
 
   return thisObject
 
+  function finalize () {
+    thisObject.parentFrame = undefined
+    thisObject.position = undefined
+    thisObject.offset = undefined
+  }
+
   function initialize (pType) {
     if (pType !== undefined) { thisObject.type = pType }
 
-    let position = {
+    thisObject.position = {
       x: 0,
       y: 0
     }
 
-    thisObject.position = position
+    thisObject.offset = {
+      x: 0,
+      y: 0
+    }
   }
 
   function getBodyHeight () {
@@ -42,7 +52,7 @@ function newFrame () {
   }
 
   function isInViewPort () {
-   /* This function is usefull to know if the object who has this frame is currently appearing at least in part at the viewPort */
+   /* This function is usefull to know if the object who has this frame is currently appearing at least in part at the canvas.chartingSpace.viewport */
 
     point1 = {
       x: 0,
@@ -59,7 +69,7 @@ function newFrame () {
     point1 = transformThisPoint(point1, thisObject.container)
     point3 = transformThisPoint(point3, thisObject.container)
 
-    if (point1.x < viewPort.visibleArea.topRight.x && point1.y < viewPort.visibleArea.bottomRight.y && point3.x > viewPort.visibleArea.bottomLeft.x && point3.y > viewPort.visibleArea.topLeft.y) {
+    if (point1.x < canvas.chartingSpace.viewport.visibleArea.topRight.x && point1.y < canvas.chartingSpace.viewport.visibleArea.bottomRight.y && point3.x > canvas.chartingSpace.viewport.visibleArea.bottomLeft.x && point3.y > canvas.chartingSpace.viewport.visibleArea.topLeft.y) {
       return true
     } else {
       return false
@@ -87,11 +97,11 @@ function newFrame () {
     if (thisObject.parentFrame !== undefined) {
       parentPoint = thisObject.parentFrame.frameThisPoint(checkPoint)
 
-      returnPoint.x = parentPoint.x + thisObject.position.x
-      returnPoint.y = parentPoint.y + thisObject.position.y
+      returnPoint.x = parentPoint.x + thisObject.position.x + thisObject.offset.x
+      returnPoint.y = parentPoint.y + thisObject.position.y + thisObject.offset.y
     } else {
-      returnPoint.x = checkPoint.x + thisObject.position.x
-      returnPoint.y = checkPoint.y + thisObject.position.y
+      returnPoint.x = checkPoint.x + thisObject.position.x + thisObject.offset.x
+      returnPoint.y = checkPoint.y + thisObject.position.y + thisObject.offset.y
     }
 
     return returnPoint
@@ -150,83 +160,13 @@ function newFrame () {
     return point
   }
 
-  function canYouMoveHere (tempDisplacement) {
-       /*
+  function isThisPointHere (point, outsideViewPort, dontTransform, padding) {
+    // The second parameter is usefull when you want to check a point that you already know is outside the viewport.
+    // The padding is a distance to the borders of the container. Can be either negative (outside, to increase the cointainer size) or positive (inside to decrease the cointainer size)
 
-       The current frame has a position and a displacement. We need to check that none of the boundaries points of the frame fall outside of its container frame.
-       First we apply the theoreticall displacement.
-
-       */
-
-    point1 = {
-      x: thisObject.position.x,
-      y: thisObject.position.y
-    }
-
-    point2 = {
-      x: thisObject.position.x + thisObject.width,
-      y: thisObject.position.y
-    }
-
-    point3 = {
-      x: thisObject.position.x + thisObject.width,
-      y: thisObject.position.y + thisObject.height
-    }
-
-    point4 = {
-      x: thisObject.position.x,
-      y: thisObject.position.y + thisObject.height
-    }
-
-       /* Now the transformations. */
-
-    if (thisObject.parentFrame !== undefined) {
-  // If there is not a parent then there is no point to check bounderies.
-
-      point1 = thisObject.parentFrame.frameThisPoint(point1)
-      point2 = thisObject.parentFrame.frameThisPoint(point2)
-      point3 = thisObject.parentFrame.frameThisPoint(point3)
-      point4 = thisObject.parentFrame.frameThisPoint(point4)
-
-           /* We apply the temporary displacement. */
-
-      point1 = tempDisplacement.displaceThisPoint(point1)
-      point2 = tempDisplacement.displaceThisPoint(point2)
-      point3 = tempDisplacement.displaceThisPoint(point3)
-      point4 = tempDisplacement.displaceThisPoint(point4)
-
-           /* We add the actual displacement. */
-
-      point1 = thisObject.container.displacement.displaceThisPoint(point1)
-      point2 = thisObject.container.displacement.displaceThisPoint(point2)
-      point3 = thisObject.container.displacement.displaceThisPoint(point3)
-      point4 = thisObject.container.displacement.displaceThisPoint(point4)
-
-      if (thisObject.parentFrame.isThisPointHere(point1) === false) {
-        return false
-      }
-
-      if (thisObject.parentFrame.isThisPointHere(point2) === false) {
-        return false
-      }
-
-      if (thisObject.parentFrame.isThisPointHere(point3) === false) {
-        return false
-      }
-
-      if (thisObject.parentFrame.isThisPointHere(point4) === false) {
-        return false
-      }
-    }
-
-    return true
-  }
-
-  function isThisPointHere (point, outsideViewPort, dontTransform) {
- // The second parameter is usefull when you want to check a point that you already know is outside the viewport.
+    if (padding === undefined) { padding = 0 }
 
        /* We need not to modify the point received, so me make a copy of it. */
-
     let checkPoint = {
       x: point.x,
       y: point.y
@@ -236,7 +176,6 @@ function newFrame () {
        in order to have the point on the containers coordinate system and be able to compare it with its dimmensions. */
     if (dontTransform === false || dontTransform === undefined) {
       if (outsideViewPort === true) {
-        checkPoint = thisObject.container.displacement.undisplaceThisPoint(checkPoint)
         checkPoint = thisObject.container.frame.unframeThisPoint(checkPoint)
       } else {
         checkPoint = unTransformThisPoint(checkPoint, thisObject.container)
@@ -256,7 +195,7 @@ function newFrame () {
     }
 
     if (thisObject.type === 'Rectangle') {
-      if (checkPoint.x < 0 || checkPoint.y < 0 || checkPoint.x > thisObject.width || checkPoint.y > thisObject.height) {
+      if (checkPoint.x < 0 + padding || checkPoint.y < 0 + padding || checkPoint.x > thisObject.width - padding || checkPoint.y > thisObject.height - padding) {
         return false
       } else {
         return true
@@ -275,7 +214,9 @@ function newFrame () {
       y: thisObject.position.y
     }
 
-    thisPoint = thisObject.parentFrame.frameThisPoint(thisPoint)
+    if (thisObject.parentFrame !== undefined) {
+      thisPoint = thisObject.parentFrame.frameThisPoint(thisPoint)
+    }
 
    /* Now we check if the resulting point is whin the current Frame. */
 
@@ -298,9 +239,9 @@ function newFrame () {
     }
   }
 
-  function draw (drawGrid, drawBorders, drawBackground, fitFunction) {
+  function draw (drawGrid, drawBorders, drawBackground, fitFunction, style) {
     if (drawBorders === true) {
-      borders(fitFunction)
+      borders(fitFunction, style)
     }
 
     if (drawGrid === true) {
@@ -362,6 +303,7 @@ function newFrame () {
 
     browserCanvasContext.lineWidth = 0.1
     browserCanvasContext.strokeStyle = 'rgba(' + UI_COLOR.MANGANESE_PURPLE + ', 0.75)'
+    browserCanvasContext.setLineDash([0, 0])
     browserCanvasContext.stroke()
 
        /* print the title */
@@ -391,7 +333,7 @@ function newFrame () {
     browserCanvasContext.fillText(label, labelPoint.x, labelPoint.y)
   }
 
-  function borders (fitFunction) {
+  function borders (fitFunction, style) {
        /* Lest get the important points of the drawing so as to apply the needed transformations. */
 
     let point1
@@ -419,8 +361,7 @@ function newFrame () {
       y: thisObject.height
     }
 
-       /* Now the transformations. */
-
+     /* Now the transformations. */
     point1 = transformThisPoint(point1, thisObject.container)
     point2 = transformThisPoint(point2, thisObject.container)
     point3 = transformThisPoint(point3, thisObject.container)
@@ -433,8 +374,7 @@ function newFrame () {
       point4 = fitFunction(point4)
     }
 
-       /* Lets start the drawing. */
-
+     /* Lets start the drawing. */
     browserCanvasContext.beginPath()
     browserCanvasContext.moveTo(point1.x, point1.y)
     browserCanvasContext.lineTo(point2.x, point2.y)
@@ -443,8 +383,9 @@ function newFrame () {
     browserCanvasContext.lineTo(point1.x, point1.y)
     browserCanvasContext.closePath()
 
-    browserCanvasContext.strokeStyle = 'rgba(150, 150, 150, 1)'
-    browserCanvasContext.lineWidth = 1
+    browserCanvasContext.strokeStyle = 'rgba(' + style.color + ', ' + style.opacity + ')'
+    browserCanvasContext.lineWidth = style.lineWidth
+    browserCanvasContext.setLineDash(style.lineDash)
     browserCanvasContext.stroke()
 
     browserCanvasContext.closePath()
@@ -506,6 +447,7 @@ function newFrame () {
       browserCanvasContext.closePath()
       browserCanvasContext.strokeStyle = 'rgba(150, 150, 150, 0.1)'
       browserCanvasContext.lineWidth = 1
+      browserCanvasContext.setLineDash([0, 0])
       browserCanvasContext.stroke()
     }
 
@@ -563,6 +505,7 @@ function newFrame () {
     browserCanvasContext.closePath()
     browserCanvasContext.strokeStyle = 'rgba(100, 100, 100, 0.2)'
     browserCanvasContext.lineWidth = 1
+    browserCanvasContext.setLineDash([0, 0])
     browserCanvasContext.stroke()
   }
 }

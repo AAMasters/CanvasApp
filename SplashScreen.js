@@ -19,7 +19,6 @@ function newSplashScreen () {
 
   resize()
 
-  container.displacement.containerName = 'Splash Screen'
   container.frame.containerName = 'Splash Screen'
 
   container.frame.position.x = 0
@@ -44,9 +43,9 @@ function newSplashScreen () {
       canDrawLogo = true
     }
 
-    logo.src = window.canvasApp.urlPrefix + 'Images/Superalgos-logo-horz-sm-t.png'
+    logo.src = window.canvasApp.urlPrefix + 'Images/superalgos-logo.png'
 
-    window.canvasApp.eventHandler.listenToEvent('Browser Resized', resize)
+    canvas.eventHandler.listenToEvent('Browser Resized', resize)
   }
 
   function resize () {
@@ -57,13 +56,14 @@ function newSplashScreen () {
   function draw () {
     if (splashScreenNeeded === false) {
       stepsInitializationCounter = 100
+      canDrawLogo = false
 
       fadeOutCounter++
 
-      if (fadeOutCounter > 20) {
+      if (fadeOutCounter > 2) {
         return
       }
-      opacity = opacity - 0.1
+      opacity = opacity - 1
     }
 
     thisObject.container.frame.draw(false, false)
@@ -71,12 +71,9 @@ function newSplashScreen () {
         /* Set the background. */
 
     browserCanvasContext.beginPath()
-
     browserCanvasContext.rect(0, 0, thisObject.container.frame.width, thisObject.container.frame.height)
     browserCanvasContext.fillStyle = 'rgba(' + UI_COLOR.WHITE + ', ' + opacity + ')'
-
     browserCanvasContext.closePath()
-
     browserCanvasContext.fill()
 
     if (canDrawLogo === false) { return }
@@ -100,18 +97,18 @@ function newSplashScreen () {
         /* Second the % of Advance. */
 
     let label = '' + Math.trunc(stepsInitializationCounter) + ' %'
-    stepsInitializationCounter = stepsInitializationCounter + 0.5
+    stepsInitializationCounter = stepsInitializationCounter + 5.0
 
     if (stepsInitializationCounter > 99) {
       splashScreenNeeded = false
       stepsInitializationCounter = 99
     }
 
-    let fontSize = 10
+    let fontSize = 15
 
     let labelPoint = {
-      x: thisObject.container.frame.width / 2 - label.length / 2 * fontSize * FONT_ASPECT_RATIO - 25,
-      y: thisObject.container.frame.height / 2 + fontSize / 2 + fontSize * 0.1 + 80 + yDisplacement
+      x: thisObject.container.frame.width / 2 - label.length / 2 * fontSize * FONT_ASPECT_RATIO - 22,
+      y: thisObject.container.frame.height / 2 + fontSize / 2 + fontSize * 0.1 + 90 + yDisplacement
     }
 
     browserCanvasContext.font = fontSize + 'px ' + UI_FONT.PRIMARY
@@ -123,17 +120,17 @@ function newSplashScreen () {
 
         /* Algo Bots Competitions Sub Title */
 
-    fontSize = 15
+    fontSize = 35
 
-    title = 'Trading Bots Competitions Platform'
+    title = 'Beta'
 
     titlePoint = {
       x: thisObject.container.frame.width / 2 - title.length / 2 * fontSize * FONT_ASPECT_RATIO - 20,
-      y: thisObject.container.frame.height / 2 - fontSize * 2 + 80 + yDisplacement
+      y: thisObject.container.frame.height / 2 + 70 + yDisplacement
     }
 
     browserCanvasContext.font = fontSize + 'px ' + UI_FONT.PRIMARY
-    browserCanvasContext.font = 'Saira'
+    browserCanvasContext.font = 'Saira Condensed'
     browserCanvasContext.fillStyle = 'rgba(0, 0, 0,  ' + opacity + ')'
     browserCanvasContext.fillText(title, titlePoint.x, titlePoint.y)
   }
@@ -143,14 +140,14 @@ function newSplashScreen () {
 
         /* First we check if this point is inside this space. */
 
-    if (this.container.frame.isThisPointHere(point) === true) {
+    if (thisObject.container.frame.isThisPointHere(point) === true) {
             /* Now we see which is the inner most container that has it */
 
             // add validation of inner most containers here.
 
             /* The point does not belong to any inner container, so we return the current container. */
 
-      return this.container
+      return thisObject.container
     } else {
             /* This point does not belong to this space. */
 
