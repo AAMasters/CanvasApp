@@ -40,6 +40,7 @@ function newCanvas () {
     designSpace: undefined,
     animation: undefined,
     mouse: undefined,
+    shorcutNumbers: new Map(),
     initialize: initialize,
     finalize: finalize
   }
@@ -57,12 +58,14 @@ function newCanvas () {
     },
     action: ''
   }
+
   return thisObject
 
   function finalize () {
     try {
       thisObject.chartingSpace.finalize()
       thisObject.floatingSpace.finalize()
+      thisObject.shorcutNumbers = undefined
 
       browserCanvas.removeEventListener('mousedown', onMouseDown, false)
       browserCanvas.removeEventListener('mouseup', onMouseUp, false)
@@ -127,8 +130,6 @@ function newCanvas () {
       animation.initialize()
 
       thisObject.animation = animation
-      /* Low Level Infraestructure First */
-      animation.addCallBackFunction('System Event Handler Physics', systemEventHandler.physics)
 
       /* Spcaces Physics */
       animation.addCallBackFunction('CockpitSpace Physics', thisObject.cockpitSpace.physics)
@@ -246,10 +247,62 @@ function newCanvas () {
   }
 
   function onKeyDown (event) {
+    if (EDITOR_ON_FOCUS === true) { return }
     thisObject.mouse.event = event
     thisObject.mouse.action = 'key down'
 
     checkMediaRecording(event)
+    canvas.chartingSpace.onKeyPressed(event)
+
+    /* Shourcuts to Menu Items */
+    if ((event.keyCode >= 48 && event.keyCode <= 57)) {
+      let number = event.key
+      if (MENU_ITEM_ON_FOCUS !== undefined) {
+        let menuItem = thisObject.shorcutNumbers.get(number)
+        if (menuItem !== undefined) {
+          menuItem.shorcutNumber = undefined
+        }
+        thisObject.shorcutNumbers.set(number, MENU_ITEM_ON_FOCUS)
+        MENU_ITEM_ON_FOCUS.shorcutNumber = number
+      } else {
+        let menuItem = thisObject.shorcutNumbers.get(number)
+        if (menuItem !== undefined) {
+          menuItem.internalClick()
+        }
+      }
+    }
+
+    if (event.key === 'Escape' && canvas.floatingSpace.inMapMode === true) {
+      canvas.floatingSpace.exitMapMode()
+    }
+
+    if (event.shiftKey === true && (event.ctrlKey === true || event.metaKey === true) && (event.key === 'M' || event.key === 'm')) {
+      canvas.floatingSpace.toggleMapMode()
+      event.preventDefault()
+      return
+    }
+
+    if (event.shiftKey === true && (event.ctrlKey === true || event.metaKey === true) && (event.key === 'R' || event.key === 'r')) {
+      canvas.floatingSpace.toggleDrawReferenceLines()
+      event.preventDefault()
+      return
+    }
+
+    if (event.shiftKey === true && (event.ctrlKey === true || event.metaKey === true) && (event.key === 'C' || event.key === 'c')) {
+      canvas.floatingSpace.toggleDrawChainLines()
+      event.preventDefault()
+      return
+    }
+
+    if (event.shiftKey === true && (event.ctrlKey === true || event.metaKey === true) && (event.key === 'S' || event.key === 's')) {
+      let saved = canvas.designSpace.workspace.save()
+      if (saved === true) {
+        canvas.cockpitSpace.setStatus('Workspace Saved.', 50, canvas.cockpitSpace.statusTypes.ALL_GOOD)
+      }
+
+      event.preventDefault()
+      return
+    }
 
     let nodeOnFocus = canvas.designSpace.workspace.getNodeThatIsOnFocus()
     if (nodeOnFocus !== undefined) {
@@ -298,73 +351,93 @@ function newCanvas () {
 
     if (event.shiftKey === true && (event.ctrlKey === true || event.metaKey === true) && event.code === 'ArrowUp') {
       thisObject.cockpitSpace.toTop()
+      event.preventDefault()
       return
     }
 
     if (event.shiftKey === true && (event.ctrlKey === true || event.metaKey === true) && event.code === 'ArrowDown') {
       thisObject.cockpitSpace.toBottom()
+      event.preventDefault()
       return
     }
 
     if (event.shiftKey === true && (event.ctrlKey === true || event.metaKey === true) && event.code === 'ArrowLeft') {
       thisObject.cockpitSpace.moveUp()
+      event.preventDefault()
       return
     }
 
     if (event.shiftKey === true && (event.ctrlKey === true || event.metaKey === true) && event.code === 'ArrowRight') {
       thisObject.cockpitSpace.moveDown()
+      event.preventDefault()
       return
     }
 
-    if (event.shiftKey === true && event.ctrlKey === false && event.code === 'ArrowLeft') {
+    if (event.shiftKey === true && (event.ctrlKey === false && event.metaKey === false) && event.code === 'ArrowLeft') {
       canvas.chartingSpace.oneScreenLeft()
+      event.preventDefault()
       return
     }
 
-    if (event.shiftKey === true && event.ctrlKey === false && event.code === 'ArrowRight') {
+    if (event.shiftKey === true && (event.ctrlKey === false && event.metaKey === false) && event.code === 'ArrowRight') {
       canvas.chartingSpace.oneScreenRight()
+      event.preventDefault()
       return
     }
 
-    if (event.shiftKey === true && event.code === 'ArrowUp') {
+    if (event.shiftKey === true && (event.ctrlKey === false && event.metaKey === false) && event.code === 'ArrowUp') {
       canvas.chartingSpace.oneScreenUp()
+      event.preventDefault()
       return
     }
 
-    if (event.shiftKey === true && event.code === 'ArrowDown') {
+    if (event.shiftKey === true && (event.ctrlKey === false && event.metaKey === false) && event.code === 'ArrowDown') {
       canvas.chartingSpace.oneScreenDown()
+      event.preventDefault()
       return
     }
 
     if ((event.ctrlKey === true || event.metaKey === true) && event.shiftKey === false && event.code === 'ArrowLeft') {
       let displaceVector = canvas.floatingSpace.oneScreenLeft()
-      dragVector.downX = dragVector.downX + displaceVector.x
-      dragVector.downY = dragVector.downY + displaceVector.y
-      checkDrag()
+      if (displaceVector !== undefined) {
+        dragVector.downX = dragVector.downX + displaceVector.x
+        dragVector.downY = dragVector.downY + displaceVector.y
+        checkDrag()
+      }
+      event.preventDefault()
       return
     }
 
     if ((event.ctrlKey === true || event.metaKey === true) && event.shiftKey === false && event.code === 'ArrowRight') {
       let displaceVector = canvas.floatingSpace.oneScreenRight()
-      dragVector.downX = dragVector.downX + displaceVector.x
-      dragVector.downY = dragVector.downY + displaceVector.y
-      checkDrag()
+      if (displaceVector !== undefined) {
+        dragVector.downX = dragVector.downX + displaceVector.x
+        dragVector.downY = dragVector.downY + displaceVector.y
+        checkDrag()
+      }
+      event.preventDefault()
       return
     }
 
-    if ((event.ctrlKey === true || event.metaKey === true) && event.code === 'ArrowUp') {
+    if ((event.ctrlKey === true || event.metaKey === true) && event.shiftKey === false && event.code === 'ArrowUp') {
       let displaceVector = canvas.floatingSpace.oneScreenUp()
-      dragVector.downX = dragVector.downX + displaceVector.x
-      dragVector.downY = dragVector.downY + displaceVector.y
-      checkDrag()
+      if (displaceVector !== undefined) {
+        dragVector.downX = dragVector.downX + displaceVector.x
+        dragVector.downY = dragVector.downY + displaceVector.y
+        checkDrag()
+      }
+      event.preventDefault()
       return
     }
 
-    if ((event.ctrlKey === true || event.metaKey === true) && event.code === 'ArrowDown') {
+    if ((event.ctrlKey === true || event.metaKey === true) && event.shiftKey === false && event.code === 'ArrowDown') {
       let displaceVector = canvas.floatingSpace.oneScreenDown()
-      dragVector.downX = dragVector.downX + displaceVector.x
-      dragVector.downY = dragVector.downY + displaceVector.y
-      checkDrag()
+      if (displaceVector !== undefined) {
+        dragVector.downX = dragVector.downX + displaceVector.x
+        dragVector.downY = dragVector.downY + displaceVector.y
+        checkDrag()
+      }
+      event.preventDefault()
       return
     }
 
@@ -376,8 +449,9 @@ function newCanvas () {
     }
 
     if ((event.ctrlKey === true || event.metaKey === true) && event.altKey === true) {
+      /* Shortcuts to nodes */
       if ((event.keyCode >= 48 && event.keyCode <= 57) || (event.keyCode >= 65 && event.keyCode <= 90)) {
-        /* From here we prevent the default behaviour */
+        /* From here we prevent the default behaviour. Putting it earlier prevents imput box and text area to receive keystrokes */
         event.preventDefault()
 
         let nodeUsingThisKey = canvas.designSpace.workspace.getNodeByShortcutKey(event.key)
@@ -548,13 +622,17 @@ function newCanvas () {
 
            /* We check if the mouse is over a panel/ */
 
-      container = thisObject.panelsSpace.getContainer(point)
+      container = thisObject.panelsSpace.getContainer(point, GET_CONTAINER_PURPOSE.DRAGGING)
 
-      if (container !== undefined && container.isDraggeable === true && event.shiftKey === false) {
-        containerBeingDragged = container
-        containerDragStarted = true
-        containerBeingDragged.eventHandler.raiseEvent('onDragStarted', point)
-        return
+      if (container !== undefined && event.shiftKey === false) {
+        if (container.isDraggeable === true) {
+          containerBeingDragged = container
+          containerDragStarted = true
+          containerBeingDragged.eventHandler.raiseEvent('onDragStarted', point)
+          return
+        } else {
+          return
+        }
       }
 
       if (container !== undefined && container.isClickeable === true) {
@@ -574,7 +652,9 @@ function newCanvas () {
           return
         } else {
           if (container.isClickeable === false) {
-            viewPortBeingDragged = true
+            if (event.buttons === 2) {
+              viewPortBeingDragged = true
+            }
           }
           return
         }
@@ -587,6 +667,12 @@ function newCanvas () {
         containerDragStarted = true
         floatingObjectDragStarted = true
         containerBeingDragged.eventHandler.raiseEvent('onDragStarted', point)
+
+        if (event.candelDragging === true) {
+          containerBeingDragged = undefined
+          containerDragStarted = false
+          floatingObjectDragStarted = false
+        }
         return
       }
 
@@ -641,7 +727,7 @@ function newCanvas () {
 
            /* We check if the mouse is over a panel/ */
 
-      container = thisObject.panelsSpace.getContainer(point)
+      container = thisObject.panelsSpace.getContainer(point, GET_CONTAINER_PURPOSE.MOUSE_CLICK)
 
       if (container !== undefined && container.isClickeable === true) {
         container.eventHandler.raiseEvent('onMouseClick', point)
@@ -751,7 +837,7 @@ function newCanvas () {
 
       let container
 
-      /* We check if the mouse is over an element of the Strategy Space / */
+      /* We check if the mouse is over an element of the Designe Space / */
       if (thisObject.designSpace !== undefined) {
         container = thisObject.designSpace.getContainer(point)
 
@@ -783,7 +869,7 @@ function newCanvas () {
 
        /* We check if the mouse is over a panel/ */
       if (thisObject.panelsSpace !== undefined) {
-        container = thisObject.panelsSpace.getContainer(point)
+        container = thisObject.panelsSpace.getContainer(point, GET_CONTAINER_PURPOSE.MOUSE_OVER)
 
         if (container !== undefined && container.detectMouseOver === true) {
           containerFound()
@@ -835,6 +921,9 @@ function newCanvas () {
            // cross-browser wheel delta
       var event = window.event || event // old IE support
       event.delta = Math.max(-1, Math.min(1, event.wheelDelta || -event.detail))
+      if (IS_MAC) {
+        event.delta = event.delta / MAC_AMOUNT_FACTOR
+      }
 
            /* We try first with panels. */
 
@@ -900,7 +989,7 @@ function newCanvas () {
      floatingObjectDragStarted ||
      viewPortBeingDragged
      ) {
-        ignoreNextClick = true
+        ignoreNextClick = false
       }
            /* Turn off all the possible things that can be dragged. */
 
@@ -922,10 +1011,12 @@ function newCanvas () {
   function checkDrag (event) {
     try {
       if (containerDragStarted === true || floatingObjectDragStarted === true || viewPortBeingDragged === true) {
-        thisObject.mouse.event = event
-        thisObject.mouse.position.x = event.pageX
-        thisObject.mouse.position.y = event.pageY - CURRENT_TOP_MARGIN
-        thisObject.mouse.action = 'dragging'
+        if (event !== undefined) {
+          thisObject.mouse.event = event
+          thisObject.mouse.position.x = event.pageX
+          thisObject.mouse.position.y = event.pageY - CURRENT_TOP_MARGIN
+          thisObject.mouse.action = 'dragging'
+        }
 
         browserCanvas.style.cursor = 'grabbing'
         thisObject.eventHandler.raiseEvent('Dragging', undefined)

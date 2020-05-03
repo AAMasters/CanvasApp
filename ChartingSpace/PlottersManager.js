@@ -80,7 +80,7 @@ function newPlottersManager () {
   }
 
   function initialize (pLayersPanel) {
-    /* Remember the Layers Panel */
+    /* Remember this */
     layersPanel = pLayersPanel
 
     /* Listen to the event of change of status */
@@ -146,6 +146,13 @@ function newPlottersManager () {
         }
       }
 
+      let host = layer.networkNode.code.host
+      let webPort = layer.networkNode.code.webPort
+      if (host === undefined) { host = 'localhost' }
+      if (webPort === undefined) { webPort = window.location.port }
+
+      let eventsServerClient = canvas.designSpace.workspace.eventsServerClients.get(layer.networkNode.id)
+
       storage.initialize(
         dataMine,
         bot,
@@ -155,6 +162,9 @@ function newPlottersManager () {
         market,
         datetime,
         timeFrame,
+        host,
+        webPort,
+        eventsServerClient,
         onProductStorageInitialized
       )
 
@@ -244,7 +254,7 @@ function newPlottersManager () {
       }
     }
     if (layer.status === LAYER_STATUS.OFF) {
-            /* If the plotter of this card is not on our Active Plotters list, then we remove it. */
+      /* If the plotter of this card is not on our Active Plotters list, then we remove it. */
       for (let i = 0; i < thisObject.connectors.length; i++) {
         let connector = thisObject.connectors[i]
         if (connector.layer.payload.node.id === layer.payload.node.id) {
@@ -301,9 +311,16 @@ function newPlottersManager () {
   function draw () {
     if (thisObject.connectors === undefined) { return } // We need to wait
         /* First the Product Plotters. */
+    let maxElementsPlotted = 0
     for (let i = 0; i < thisObject.connectors.length; i++) {
       let connector = thisObject.connectors[thisObject.connectors.length - i - 1]
-      connector.plotter.draw()
+      let elementsPlotted = connector.plotter.draw()
+      if (elementsPlotted !== undefined) {
+        if (elementsPlotted > maxElementsPlotted) {
+          maxElementsPlotted = elementsPlotted
+        }
+      }
     }
+    return maxElementsPlotted
   }
 }

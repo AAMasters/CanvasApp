@@ -14,6 +14,7 @@ function newRateScale () {
     onMouseOverSomeTimeMachineContainer: onMouseOverSomeTimeMachineContainer,
     physics: physics,
     draw: draw,
+    drawBackground: drawBackground,
     drawForeground: drawForeground,
     getContainer: getContainer,
     initialize: initialize,
@@ -42,20 +43,36 @@ function newRateScale () {
   let onMouseOverEventSubscriptionId
   let onMouseNotOverEventSubscriptionId
   let onScaleChangedEventSubscriptionId
+  let onDragStartedEventSubscriptionId
 
   let coordinateSystem
+  let coordinateSystemWhenDragStarted
+
   let limitingContainer
   let rateCalculationsContainer
 
-  let mouse = {
+  mouseWhenDragStarted = {
     position: {
       x: 0,
       y: 0
     }
   }
 
+  parentFrameWhenDragStarted = {
+    position: {
+      x: 0,
+      y: 0
+    },
+    width: 0,
+    height: 0
+  }
+
   let scaleDisplayTimer = 0
   let autoScaleButton
+
+  let wheelDeltaDirection
+  let wheelDeltaCounter = 0
+
   return thisObject
 
   function finalize () {
@@ -63,16 +80,25 @@ function newRateScale () {
     thisObject.container.eventHandler.stopListening(onMouseOverEventSubscriptionId)
     thisObject.container.eventHandler.stopListening(onMouseNotOverEventSubscriptionId)
     coordinateSystem.eventHandler.stopListening(onScaleChangedEventSubscriptionId)
+    thisObject.container.eventHandler.stopListening(onDragStartedEventSubscriptionId)
 
     thisObject.container.finalize()
     thisObject.container = undefined
     thisObject.fitFunction = undefined
     thisObject.payload = undefined
 
+    if (coordinateSystemWhenDragStarted !== undefined) {
+      coordinateSystemWhenDragStarted.finalize()
+    }
+
+    coordinateSystemWhenDragStarted = undefined
+
     coordinateSystem = undefined
     limitingContainer = undefined
     rateCalculationsContainer = undefined
-    mouse = undefined
+
+    mouseWhenDragStarted = undefined
+    parentFrameWhenDragStarted = undefined
 
     autoScaleButton.finalize()
     autoScaleButton = undefined
@@ -90,6 +116,7 @@ function newRateScale () {
     onMouseOverEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onMouseOver', onMouseOver)
     onMouseNotOverEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onMouseNotOver', onMouseNotOver)
     onScaleChangedEventSubscriptionId = coordinateSystem.eventHandler.listenToEvent('Scale Changed', onScaleChanged)
+    onDragStartedEventSubscriptionId = draggeableContainer.eventHandler.listenToEvent('onDragStarted', onDragStarted)
 
     autoScaleButton = newAutoScaleButton()
     autoScaleButton.container.connectToParent(thisObject.container)
@@ -110,12 +137,6 @@ function newRateScale () {
         turnOnCounter = 0
       }
     }
-    mouse = {
-      position: {
-        x: event.x,
-        y: event.y
-      }
-    }
   }
 
   function onScaleChanged () {
@@ -134,6 +155,42 @@ function newRateScale () {
   }
 
   function onMouseWheel (event) {
+    if (IS_MAC) {
+      let sensitivity
+      if (event.wheelDelta < 0) {
+        if (event.shiftKey === true) {
+          sensitivity = 20
+        } else {
+          sensitivity = 5
+        }
+        if (wheelDeltaDirection === -1) {
+          wheelDeltaCounter++
+          if (wheelDeltaCounter < sensitivity) {
+            return
+          } else {
+            wheelDeltaCounter = 0
+          }
+        } else {
+          wheelDeltaCounter = 0
+          wheelDeltaDirection = -1
+          return
+        }
+      } else {
+        if (wheelDeltaDirection === 1) {
+          wheelDeltaCounter++
+          if (wheelDeltaCounter < sensitivity) {
+            return
+          } else {
+            wheelDeltaCounter = 0
+          }
+        } else {
+          wheelDeltaCounter = 0
+          wheelDeltaDirection = 1
+          return
+        }
+      }
+    }
+
     if (event.shiftKey === true) {
       autoScaleButton.container.eventHandler.raiseEvent('onMouseWheel', event)
       return
@@ -152,6 +209,38 @@ function newRateScale () {
 
     coordinateSystem.zoomY(factor, event, limitingContainer)
     scaleDisplayTimer = 100
+  }
+
+  function onDragStarted (event) {
+    mouseWhenDragStarted = {
+      position: {
+        x: event.x,
+        y: event.y
+      }
+    }
+
+    parentFrameWhenDragStarted = {
+      position: {
+        x: limitingContainer.frame.position.x,
+        y: limitingContainer.frame.position.y
+      },
+      width: limitingContainer.frame.width,
+      height: limitingContainer.frame.height
+    }
+
+    coordinateSystemWhenDragStarted = newCoordinateSystem()
+
+    let minValue = {
+      x: coordinateSystem.min.x,
+      y: coordinateSystem.min.y
+    }
+
+    let maxValue = {
+      x: coordinateSystem.max.x,
+      y: coordinateSystem.max.y
+    }
+
+    coordinateSystemWhenDragStarted.initialize(minValue, maxValue, coordinateSystem.maxWidth, coordinateSystem.maxHeight)
   }
 
   function getContainer (point, purpose) {
@@ -221,42 +310,51 @@ function newRateScale () {
   }
 
   function draggingPhysics () {
+    if (coordinateSystemWhenDragStarted === undefined) { return }
     if (draggeableContainer.frame.position.y === 0) { return }
 
+    let mouseNoZoom = canvas.chartingSpace.viewport.unTransformThisPoint(canvas.mouse.position)
+    let mouseWhenDragStartedNoZoom = canvas.chartingSpace.viewport.unTransformThisPoint(mouseWhenDragStarted.position)
+
+    let dragVectorWhenDragStarted = {
+      x: 0,
+      y: mouseNoZoom.y - mouseWhenDragStartedNoZoom.y
+    }
+
     let dragVector = {
-      x: draggeableContainer.frame.position.x,
+      x: 0,
       y: draggeableContainer.frame.position.y
     }
 
-    draggeableContainer.frame.position.x = 0
     draggeableContainer.frame.position.y = 0
 
     let point = {
       x: 0,
-      y: -dragVector.y
+      y: (-dragVectorWhenDragStarted.y)
     }
 
-    let newMaxRate = getRateFromPointAtContainer(point, limitingContainer, coordinateSystem)
-    let yDifferenceMaxMin = coordinateSystem.max.y - coordinateSystem.min.y
+    let newMaxRate = getRateFromPointAtContainer(point, limitingContainer, coordinateSystemWhenDragStarted)
+    let yDifferenceMaxMin = coordinateSystemWhenDragStarted.max.y - coordinateSystemWhenDragStarted.min.y
 
     coordinateSystem.min.y = newMaxRate - yDifferenceMaxMin
     coordinateSystem.max.y = newMaxRate
+    let event = {
+      type: 'center dragged',
+      dragVector: dragVector
+    }
     coordinateSystem.recalculateScale()
   }
 
   function onUpstreamScaleChanged (event) {
     if (event === undefined) { return }
+    if (event.dragVector.y === 0) { return }
     if (event.type === 'center dragged') {
       let point = {
         x: event.dragVector.x,
         y: -event.dragVector.y
       }
-      let newMinDate = getDateFromPointAtContainer(point, rateCalculationsContainer, coordinateSystem)
       let newMaxRate = getRateFromPointAtContainer(point, rateCalculationsContainer, coordinateSystem)
-      let xDifferenceMaxMin = coordinateSystem.max.x - coordinateSystem.min.x
       let yDifferenceMaxMin = coordinateSystem.max.y - coordinateSystem.min.y
-      coordinateSystem.min.x = newMinDate.valueOf()
-      coordinateSystem.max.x = newMinDate.valueOf() + xDifferenceMaxMin
       coordinateSystem.min.y = newMaxRate - yDifferenceMaxMin
       coordinateSystem.max.y = newMaxRate
 
@@ -334,7 +432,7 @@ function newRateScale () {
     /* Mouse Position Rate Calculation */
     let ratePoint = {
       x: 0,
-      y: mouse.position.y
+      y: canvas.mouse.position.y
     }
 
     thisObject.rate = getRateFromPointAtBrowserCanvas(ratePoint, rateCalculationsContainer, coordinateSystem)
@@ -346,7 +444,7 @@ function newRateScale () {
     }
 
     ratePoint = transformThisPoint(ratePoint, limitingContainer.frame.container)
-    ratePoint.y = mouse.position.y - thisObject.container.frame.height / 2 + thisObject.container.frame.height
+    ratePoint.y = canvas.mouse.position.y - thisObject.container.frame.height / 2 + thisObject.container.frame.height
 
     /* Checking against the container limits. */
     if (ratePoint.x < upCorner.x) { ratePoint.x = upCorner.x }
@@ -370,6 +468,10 @@ function newRateScale () {
       thisObject.isVisible = false
       thisObject.payload.isVisible = false
     }
+
+    if (canvas.chartingSpace.viewport.zoomTargetLevel < ZOOM_OUT_THRESHOLD_FOR_DISPLAYING_SCALES) {
+      thisObject.isVisible = false
+    }
   }
 
   function draw () {
@@ -387,13 +489,54 @@ function newRateScale () {
     }
   }
 
+  function drawBackground () {
+    drawScale()
+  }
+
+  function drawScale () {
+    const SEPARATION = 50
+    const NUMBER_OF_LABELS = Math.trunc(canvas.chartingSpace.viewport.height / SEPARATION)
+    const FONT_SIZE = 15
+
+    for (let i = 0; i <= NUMBER_OF_LABELS; i++) {
+      let ratePoint1 = {
+        x: 0,
+        y: TOP_SPACE_HEIGHT + SEPARATION * (i + 1)
+      }
+      let ratePoint2 = {
+        x: 0,
+        y: TOP_SPACE_HEIGHT + SEPARATION * (i + 0)
+      }
+
+      let rate = getRateFromPointAtBrowserCanvas(ratePoint1, rateCalculationsContainer, coordinateSystem)
+      let labels = scaleLabels(rate)
+      let decimalsDisplace = labels[1].length * FONT_SIZE * FONT_ASPECT_RATIO
+
+      let fitPoint1 = thisObject.fitFunction(ratePoint1)
+      let fitPoint2 = thisObject.fitFunction(ratePoint2)
+
+      if (fitPoint1.y === ratePoint1.y && fitPoint2.y === ratePoint2.y) {
+        drawLabel(labels[1], 1 / 2, 0, 0, 0, FONT_SIZE, thisObject.container, UI_COLOR.GREY, undefined, ratePoint1.y)
+        drawLabel(labels[2], 1 / 2, 0, decimalsDisplace, -5, 9, thisObject.container, UI_COLOR.GREY, undefined, ratePoint1.y)
+      }
+    }
+  }
+
   function drawScaleBox () {
     if (thisObject.rate === undefined) { return }
     if (thisObject.payload === undefined) { return }
     if (thisObject.payload.node === undefined) { return }
 
-    let rate = thisObject.rate
+    let icon1 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.payload.parentNode.type)
+    let icon2 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.type)
 
+    let backgroundColor = UI_COLOR.BLACK
+    let labels = scaleLabels(thisObject.rate)
+
+    drawScaleDisplay(labels[0], labels[1], labels[2], 0, 0, 0, icon1, icon2, thisObject.container, backgroundColor)
+  }
+
+  function scaleLabels (rate) {
     if (rate < coordinateSystem.min.y) {
       rate = coordinateSystem.min.y
     }
@@ -401,23 +544,23 @@ function newRateScale () {
       rate = coordinateSystem.max.y
     }
 
-    let label = (rate - Math.trunc(rate)).toFixed(2)
+    let label = dynamicDecimals(rate)
     let labelArray = label.split('.')
     let label1 = thisObject.payload.node.payload.parentNode.name
     let label2 = (Math.trunc(rate)).toLocaleString()
     let label3 = labelArray[1]
     if (label3 === undefined) { label3 = '00' }
 
-    let icon1 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.payload.parentNode.type)
-    let icon2 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.type)
-
-    let backgroundColor = UI_COLOR.BLACK
+    if (rate < 1) {
+      label2 = label
+      label3 = ''
+    }
 
     if (scaleDisplayTimer > 0) {
       label2 = (coordinateSystem.scale.y * 10000).toFixed(2)
       label3 = 'SCALE'
     }
 
-    drawScaleDisplay(label1, label2, label3, 0, 0, 0, icon1, icon2, thisObject.container, backgroundColor)
+    return [label1, label2, label3]
   }
 }

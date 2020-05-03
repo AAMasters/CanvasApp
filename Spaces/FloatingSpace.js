@@ -11,6 +11,17 @@ function newFloatingSpace () {
     floatingLayer: undefined,               // This is the array of floatingObjects being displayed
     uiObjectConstructor: undefined,
     container: undefined,
+    inMapMode: false,
+    drawReferenceLines: false,
+    drawChainLines: true,
+    toggleDrawChainLines: toggleDrawChainLines,
+    toggleDrawReferenceLines: toggleDrawReferenceLines,
+    toggleMapMode: toggleMapMode,
+    enterMapMode: enterMapMode,
+    exitMapMode: exitMapMode,
+    transformPointToMap: transformPointToMap,
+    transformRadiusToMap: transformRadiusToMap,
+    transformImagesizeToMap: transformImagesizeToMap,
     oneScreenUp: oneScreenUp,
     oneScreenDown: oneScreenDown,
     oneScreenLeft: oneScreenLeft,
@@ -34,6 +45,7 @@ function newFloatingSpace () {
   thisObject.container.isDraggeable = true
   thisObject.container.isWheelable = true
   thisObject.container.detectMouseOver = true
+  thisObject.container.isClickeable = false
   thisObject.container.frame.radius = 0
 
   let devicePixelRatio = window.devicePixelRatio
@@ -45,14 +57,17 @@ function newFloatingSpace () {
   thisObject.container.frame.position.y = browserCanvas.height / 2 - thisObject.container.frame.height / 2
 
   let visible = false
+  let floatingObjetOnFocus
 
   const PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT = 25
-  let eventSubscriptionId
+  let onDragStartedEventSubscriptionId
+  let spaceFocusAquiredEventSubscriptionId
 
   return thisObject
 
   function finalize () {
-    thisObject.container.eventHandler.stopListening(eventSubscriptionId)
+    thisObject.container.eventHandler.stopListening(onDragStartedEventSubscriptionId)
+    canvas.floatingSpace.container.eventHandler.stopListening(spaceFocusAquiredEventSubscriptionId)
 
     thisObject.floatingLayer.finalize()
     thisObject.uiObjectConstructor.finalize()
@@ -61,6 +76,8 @@ function newFloatingSpace () {
     thisObject.floatingLayer = undefined
     thisObject.uiObjectConstructor = undefined
     thisObject.container = undefined
+
+    floatingObjetOnFocus = undefined
   }
 
   function initialize (callBackFunction) {
@@ -70,12 +87,119 @@ function newFloatingSpace () {
     thisObject.uiObjectConstructor = newUiObjectConstructor()
     thisObject.uiObjectConstructor.initialize(thisObject.floatingLayer)
 
-    eventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onMouseWheel', onMouseWheel)
+    onDragStartedEventSubscriptionId = thisObject.container.eventHandler.listenToEvent('onDragStarted', onDragStarted)
+    spaceFocusAquiredEventSubscriptionId = canvas.floatingSpace.container.eventHandler.listenToEvent('onFocusAquired', someoneAquiredFocus)
+  }
+
+  function someoneAquiredFocus (floatingObject) {
+    if (floatingObject === undefined || floatingObject.container === undefined) {
+      return
+    }
+    floatingObjetOnFocus = floatingObject
+  }
+
+  function toggleDrawReferenceLines () {
+    if (thisObject.drawReferenceLines === true) {
+      thisObject.drawReferenceLines = false
+    } else {
+      thisObject.drawReferenceLines = true
+    }
+  }
+
+  function toggleDrawChainLines () {
+    if (thisObject.drawChainLines === true) {
+      thisObject.drawChainLines = false
+    } else {
+      thisObject.drawChainLines = true
+    }
+  }
+
+  function transformPointToMap (point) {
+    let returnPoint = {
+      x: point.x - thisObject.container.frame.position.x,
+      y: point.y - thisObject.container.frame.position.y
+    }
+    returnPoint.x = returnPoint.x / SPACE_SIZE * browserCanvas.width
+    returnPoint.y = returnPoint.y / SPACE_SIZE * browserCanvas.height
+    return returnPoint
+  }
+
+  function transformRadiusToMap (radius) {
+    const RADIUS_REDUCTION_FACTOR = 2
+    return radius / RADIUS_REDUCTION_FACTOR
+  }
+
+  function transformImagesizeToMap (imageSize) {
+    const IMAGE_REDUCTION_FACTOR = 3
+    return imageSize / IMAGE_REDUCTION_FACTOR
+  }
+
+  function enterMapMode () {
+    thisObject.inMapMode = true
+  }
+
+  function exitMapMode () {
+    thisObject.inMapMode = false
+  }
+
+  function toggleMapMode () {
+    if (thisObject.inMapMode === false) {
+      enterMapMode()
+    } else {
+      exitMapMode()
+    }
+  }
+
+  function onDragStarted (event) {
+    if (thisObject.inMapMode === false) {
+      if (event.buttons !== 2) { return }
+      event.candelDragging = true
+      enterMapMode()
+    } else {
+      if (event.buttons !== 1) {
+        event.candelDragging = true
+        return
+      }
+
+      let mousePosition = {
+        x: event.x,
+        y: event.y
+      }
+
+      let mouseAtSpace = {
+        x: mousePosition.x / browserCanvas.width * SPACE_SIZE,
+        y: mousePosition.y / browserCanvas.height * SPACE_SIZE
+      }
+      /* Let's see if we can snap to some of the root nodes that are isHierarchyHead */
+      let snapCandidateNodes = canvas.designSpace.workspace.getHierarchyHeads()
+      for (let i = 0; i < snapCandidateNodes.length; i++) {
+        let node = snapCandidateNodes[i]
+        let nodePosition = {
+          x: node.payload.floatingObject.container.frame.position.x,
+          y: node.payload.floatingObject.container.frame.position.y
+        }
+        // nodePosition = node.payload.floatingObject.container.frame.frameThisPoint(nodePosition)
+
+        let distance = Math.sqrt(Math.pow(mouseAtSpace.x - nodePosition.x, 2) + Math.pow(mouseAtSpace.y - nodePosition.y, 2))
+        const SNAP_THREASHOLD = 1000
+        if (distance < SNAP_THREASHOLD) {
+          mousePosition.x = nodePosition.x / SPACE_SIZE * browserCanvas.width
+          mousePosition.y = nodePosition.y / SPACE_SIZE * browserCanvas.height
+        }
+      }
+
+      /* Movign the Floating Space to where the mouse is. */
+      thisObject.container.frame.position.x = -mousePosition.x / browserCanvas.width * SPACE_SIZE + browserCanvas.width / 2
+      thisObject.container.frame.position.y = -mousePosition.y / browserCanvas.height * SPACE_SIZE + browserCanvas.height / 2
+
+      exitMapMode()
+    }
   }
 
   function isItFar (payload, dontCheckParent) {
     /* If for any reason the paylaod is undefined we return false */
     if (payload === undefined) { return false }
+    if (thisObject.inMapMode === true) { return false }
 
     let radarFactor = 2 // How big is the margin
 
@@ -92,7 +216,8 @@ function newFloatingSpace () {
       payload.node.type === 'Network' ||
       payload.node.type === 'Crypto Ecosystem' ||
       payload.node.type === 'Charting Space' ||
-      payload.node.type === 'Data Mine'
+      payload.node.type === 'Data Mine' ||
+      payload.node.type === 'Super Scripts'
   ) {
       return false
     }
@@ -151,6 +276,7 @@ function newFloatingSpace () {
   }
 
   function oneScreenUp () {
+    if (visible === false) { return }
     let displaceVector = {
       x: 0,
       y: browserCanvas.height * PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT / 100
@@ -161,6 +287,7 @@ function newFloatingSpace () {
   }
 
   function oneScreenDown () {
+    if (visible === false) { return }
     let displaceVector = {
       x: 0,
       y: -browserCanvas.height * PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT / 100
@@ -171,6 +298,7 @@ function newFloatingSpace () {
   }
 
   function oneScreenLeft () {
+    if (visible === false) { return }
     let displaceVector = {
       x: browserCanvas.width * PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT / 100,
       y: 0
@@ -181,6 +309,7 @@ function newFloatingSpace () {
   }
 
   function oneScreenRight () {
+    if (visible === false) { return }
     let displaceVector = {
       x: -browserCanvas.width * PERCENTAGE_OF_SCREEN_FOR_DISPLACEMENT / 100,
       y: 0
@@ -221,10 +350,6 @@ function newFloatingSpace () {
     return true
   }
 
-  function onMouseWheel (event) {
-    thisObject.floatingLayer.changeTargetRepulsion(event.wheelDelta)
-  }
-
   function makeVisible () {
     visible = true
   }
@@ -234,7 +359,17 @@ function newFloatingSpace () {
   }
 
   function getContainer (point) {
+    if (visible === false) { return }
+
     let container
+
+    if (floatingObjetOnFocus !== undefined) {
+      container = floatingObjetOnFocus.getContainer(point)
+      if (container !== undefined) {
+        container.space = 'Floating Space'
+        return container
+      }
+    }
 
     container = thisObject.floatingLayer.getContainer(point)
     if (container !== undefined) {
@@ -249,9 +384,24 @@ function newFloatingSpace () {
   }
 
   function physics () {
-    if (visible === true) {
-      browserZoomPhysics()
-      thisObject.floatingLayer.physics()
+    if (visible === false) { return }
+    browserZoomPhysics()
+    positionContraintsPhysics()
+    thisObject.floatingLayer.physics()
+  }
+
+  function positionContraintsPhysics () {
+    if (thisObject.container.frame.position.x > 0) {
+      thisObject.container.frame.position.x = 0
+    }
+    if (thisObject.container.frame.position.y > 0) {
+      thisObject.container.frame.position.y = 0
+    }
+    if (thisObject.container.frame.position.x + thisObject.container.frame.width < browserCanvas.width) {
+      thisObject.container.frame.position.x = browserCanvas.width - thisObject.container.frame.width
+    }
+    if (thisObject.container.frame.position.y + thisObject.container.frame.height < browserCanvas.height) {
+      thisObject.container.frame.position.y = browserCanvas.height - thisObject.container.frame.height
     }
   }
 
@@ -265,10 +415,9 @@ function newFloatingSpace () {
   }
 
   function draw () {
-    if (visible === true) {
-      drawBackground()
-      thisObject.floatingLayer.draw()
-    }
+    if (visible === false) { return }
+    drawBackground()
+    thisObject.floatingLayer.draw()
   }
 
   function drawBackground () {

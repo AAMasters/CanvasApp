@@ -22,29 +22,41 @@ function newCircularProgressBar () {
   thisObject.container.frame.position.y = 0
 
   let opacityCounters = []
-
   let eventSubscriptionIdHeartbeat
+  let needToDrawRing = true
+  let eventsServerClient
 
   return thisObject
 
   function finalize () {
-    let key = thisObject.payload.node.name + '-' + thisObject.payload.node.type + '-' + thisObject.payload.node.id
-    systemEventHandler.stopListening(key, eventSubscriptionIdHeartbeat)
+    finalizeEventsServerClient()
 
     thisObject.container = undefined
     thisObject.payload = undefined
     thisObject.fitFunction = undefined
   }
 
-  function initialize (payload) {
+  function finalizeEventsServerClient () {
+    if (eventsServerClient !== undefined) {
+      let key = thisObject.payload.node.name + '-' + thisObject.payload.node.type + '-' + thisObject.payload.node.id
+      if (eventSubscriptionIdHeartbeat !== undefined) {
+        eventsServerClient.stopListening(key, eventSubscriptionIdHeartbeat)
+      }
+    }
+  }
+
+  function initialize (payload, pEventsServerClient) {
     thisObject.payload = payload
+
+    finalizeEventsServerClient()
+    eventsServerClient = pEventsServerClient
 
     for (let i = 0; i < 60; i++) {
       opacityCounters.push(0)
     }
 
     let key = thisObject.payload.node.name + '-' + thisObject.payload.node.type + '-' + thisObject.payload.node.id
-    systemEventHandler.listenToEvent(key, 'Heartbeat', undefined, key, onResponse, onHeartBeat)
+    eventsServerClient.listenToEvent(key, 'Heartbeat', undefined, key, onResponse, onHeartBeat)
 
     function onResponse (message) {
       eventSubscriptionIdHeartbeat = message.eventSubscriptionId
@@ -55,10 +67,22 @@ function newCircularProgressBar () {
     if (thisObject.payload === undefined) { return }
     if (thisObject.payload.uiObject === undefined) { return }
     opacityCounters[message.event.seconds] = 2000
-    thisObject.payload.uiObject.setValue(message.event.processingDate)
+    if (message.event.processingDate !== undefined) {
+      thisObject.payload.uiObject.setValue(message.event.processingDate, 2000)
+    }
+    if (message.event.percentage !== undefined) {
+      thisObject.payload.uiObject.setPercentage(message.event.percentage, 2000)
+    }
+    if (message.event.status !== undefined) {
+      needToDrawRing = false
+      thisObject.payload.uiObject.setStatus(message.event.status, 200000)
+    }
+
+    thisObject.payload.uiObject.heartBeat()
   }
 
   function getContainer (point) {
+    if (canvas.floatingSpace.inMapMode === true) { return }
     let container
 
     for (let i = 0; i < menuItems.length; i++) {
@@ -83,6 +107,9 @@ function newCircularProgressBar () {
   }
 
   function drawBackground (pFloatingObject) {
+    if (canvas.floatingSpace.inMapMode === true) { return }
+    if (needToDrawRing !== true) { return }
+
     const VISIBLE_RADIUS = thisObject.container.frame.radius * 2
 
     let visiblePosition = {

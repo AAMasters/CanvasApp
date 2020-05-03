@@ -7,6 +7,7 @@ function newCircularMenu () {
     isDeployed: undefined,
     internalClick: internalClick,
     physics: physics,
+    invisiblePhysics: invisiblePhysics,
     drawBackground: drawBackground,
     drawForeground: drawForeground,
     getContainer: getContainer,
@@ -49,7 +50,7 @@ function newCircularMenu () {
 
     let iconAndTextArray = []
     let iconOnlyArray
-    let ringsArray = [[], [], []]
+    let ringsArray = [[], [], [], []]
 
     for (let i = 0; i < menuItemsInitialValues.length; i++) {
       let menuItem = newCircularMenuItem()
@@ -103,15 +104,18 @@ function newCircularMenu () {
       menuItems.push(menuItem)
     }
 
-    /* There are 3 possible rings of icons, we will go through each of them here. */
-    let amplitudeArray = [80, 50, 40]
-    let initialAngleArray = [220, 205, 200]
-    for (let j = 1; j < 4; j++) {
+    /* There are 4 possible rings of icons, we will go through each of them here. */
+    let amplitudeArray = [80, 50, 40, 80]
+    let initialAngleArray = [220, 205, 200, 180]
+    for (let j = 1; j < ringsArray.length + 1; j++) {
       let iconOnlyArray = ringsArray[j - 1]
       /* Here we calculate the angles for each menu item, and then apply it if it was not previously defined. */
       let amplitude = amplitudeArray[j - 1]
       let initialAngle = initialAngleArray[j - 1]
       let step = amplitude / (iconOnlyArray.length - 1)
+      if (iconOnlyArray.length === 1) {
+        step = 0
+      }
 
       for (let i = 0; i < iconOnlyArray.length; i++) {
         let menuItem = iconOnlyArray[i]
@@ -168,6 +172,13 @@ function newCircularMenu () {
     }
   }
 
+  function invisiblePhysics () {
+    for (let i = 0; i < menuItems.length; i++) {
+      let menuItem = menuItems[i]
+      menuItem.invisiblePhysics()
+    }
+  }
+
   function physics () {
     for (let i = 0; i < menuItems.length; i++) {
       let menuItem = menuItems[i]
@@ -187,7 +198,7 @@ function newCircularMenu () {
   function onNotFocus () {
     for (let i = 0; i < menuItems.length; i++) {
       let menuItem = menuItems[i]
-      menuItem.targetRadius = menuItem.rawRadius * 0 - i * 4
+      menuItem.targetRadius = menuItem.rawRadius * 0 - i * 1.5
       menuItem.isDeployed = false
     }
     thisObject.isDeployed = false

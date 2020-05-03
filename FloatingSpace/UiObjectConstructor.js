@@ -63,12 +63,109 @@ function newUiObjectConstructor () {
       if (payload.node.savedPayload.floatingObject.distanceToParent !== undefined) {
         floatingObject.distanceToParent = payload.node.savedPayload.floatingObject.distanceToParent
       }
+      if (payload.node.savedPayload.floatingObject.arrangementStyle !== undefined) {
+        floatingObject.arrangementStyle = payload.node.savedPayload.floatingObject.arrangementStyle
+      }
     }
 
-    /* For brand new objects being created directly by the user, we will make them inherit some properties from their parents. */
+    /*
+    For brand new objects being created directly by the user, we will make them inherit some properties
+    from their closest siblings, and if they don't have, from their parents.
+    */
+
     if (userAddingNew === true) {
-      floatingObject.angleToParent = payload.parentNode.payload.floatingObject.angleToParent
-      floatingObject.distanceToParent = payload.parentNode.payload.floatingObject.distanceToParent
+      let definition = APP_SCHEMA_MAP.get(payload.parentNode.type)
+      if (definition.properties !== undefined) {
+        for (let i = 0; i < definition.properties.length; i++) {
+          let property = definition.properties[i]
+          if (property.childType === payload.node.type) {
+            if (property.type === 'array') {
+              let parentNode = payload.parentNode
+              let parentNodeArray = parentNode[property.name]
+              if (parentNodeArray.length > 1) { // the new node was already added
+                let closestSibling = parentNodeArray[parentNodeArray.length - 2]
+                if (closestSibling !== undefined) {
+                  floatingObject.angleToParent = closestSibling.payload.floatingObject.angleToParent
+                  floatingObject.distanceToParent = closestSibling.payload.floatingObject.distanceToParent
+                  floatingObject.arrangementStyle = closestSibling.payload.floatingObject.arrangementStyle
+                  break
+                }
+              }
+            }
+            if (floatingObject.angleToParent === undefined) {
+              for (let j = i - 1; j >= 0; j--) {
+                let siblingProperty = definition.properties[j]
+                let parentNode = payload.parentNode
+                let parentNodeProperty = parentNode[siblingProperty.name]
+                if (parentNodeProperty !== undefined) {
+                  if (siblingProperty.type === 'array') {
+                    if (parentNodeProperty.length > 0) {
+                      let closestSibling = parentNodeProperty[parentNodeProperty.length - 1]
+                      if (closestSibling !== undefined) {
+                        floatingObject.angleToParent = closestSibling.payload.floatingObject.angleToParent
+                        floatingObject.distanceToParent = closestSibling.payload.floatingObject.distanceToParent
+                        floatingObject.arrangementStyle = closestSibling.payload.floatingObject.arrangementStyle
+                        break
+                      }
+                    }
+                  } else {
+                    let closestSibling = parentNodeProperty
+                    if (closestSibling !== undefined) {
+                      floatingObject.angleToParent = closestSibling.payload.floatingObject.angleToParent
+                      floatingObject.distanceToParent = closestSibling.payload.floatingObject.distanceToParent
+                      floatingObject.arrangementStyle = closestSibling.payload.floatingObject.arrangementStyle
+                      break
+                    }
+                  }
+                }
+              }
+              for (let j = i + 1; j < definition.properties.length; j++) {
+                let siblingProperty = definition.properties[j]
+                let parentNode = payload.parentNode
+                let parentNodeProperty = parentNode[siblingProperty.name]
+                if (parentNodeProperty !== undefined) {
+                  if (siblingProperty.type === 'array') {
+                    if (parentNodeProperty.length > 0) {
+                      let closestSibling = parentNodeProperty[parentNodeProperty.length - 1]
+                      if (closestSibling !== undefined) {
+                        floatingObject.angleToParent = closestSibling.payload.floatingObject.angleToParent
+                        floatingObject.distanceToParent = closestSibling.payload.floatingObject.distanceToParent
+                        floatingObject.arrangementStyle = closestSibling.payload.floatingObject.arrangementStyle
+                        break
+                      }
+                    }
+                  } else {
+                    let closestSibling = parentNodeProperty
+                    if (closestSibling !== undefined) {
+                      floatingObject.angleToParent = closestSibling.payload.floatingObject.angleToParent
+                      floatingObject.distanceToParent = closestSibling.payload.floatingObject.distanceToParent
+                      floatingObject.arrangementStyle = closestSibling.payload.floatingObject.arrangementStyle
+                      break
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (floatingObject.angleToParent === undefined) {
+        floatingObject.angleToParent = payload.parentNode.payload.floatingObject.angleToParent
+        floatingObject.distanceToParent = payload.parentNode.payload.floatingObject.distanceToParent
+        floatingObject.arrangementStyle = payload.parentNode.payload.floatingObject.arrangementStyle
+      }
+    }
+
+    /* Default Values in case there was no way to set a value previous to this. */
+    if (floatingObject.angleToParent === undefined) {
+      floatingObject.angleToParent = ANGLE_TO_PARENT.RANGE_360
+    }
+    if (floatingObject.distanceToParent === undefined) {
+      floatingObject.distanceToParent = DISTANCE_TO_PARENT.PARENT_100X
+    }
+    if (floatingObject.arrangementStyle === undefined) {
+      floatingObject.arrangementStyle = ARRANGEMENT_STYLE.CONCAVE
     }
 
     let uiObject = newUiObject()
@@ -84,7 +181,7 @@ function newUiObjectConstructor () {
         for (let j = 0; j < menuItems.length; j++) {
           let item = menuItems[j]
           item.angle = undefined
-          if (item.action.indexOf('Add ') >= 0 && item.action.indexOf('Missing') >= 0) {
+          if (item.action.indexOf('Add Missing Children') >= 0) {
             item.action = 'Add Missing Children'
           }
           if (item.action.indexOf('Delete ') >= 0) {
@@ -134,7 +231,7 @@ function newUiObjectConstructor () {
         visible: true,
         iconPathOn: 'menu-fix-pinned',
         iconPathOff: 'menu-fix-unpinned',
-        rawRadius: 8,
+        rawRadius: 12,
         targetRadius: 0,
         currentRadius: 0,
         ring: 1
@@ -149,7 +246,7 @@ function newUiObjectConstructor () {
         label: undefined,
         visible: true,
         icons: ['angle-to-parent-000', 'angle-to-parent-360', 'angle-to-parent-180', 'angle-to-parent-090', 'angle-to-parent-045'],
-        rawRadius: 8,
+        rawRadius: 12,
         targetRadius: 0,
         currentRadius: 0,
         ring: 1
@@ -157,19 +254,34 @@ function newUiObjectConstructor () {
       )
     menuItemsInitialValues.push(
       {
-        action: 'change Distance to Paarent',
+        action: 'Change Distance to Paarent',
         actionFunction: floatingObject.distanceToParentToggle,
         actionStatus: floatingObject.getDistanceToParent,
         currentStatus: true,
         label: undefined,
         visible: true,
         icons: ['distance-to-parent-000', 'distance-to-parent-025', 'distance-to-parent-050', 'distance-to-parent-100', 'distance-to-parent-150', 'distance-to-parent-200'],
-        rawRadius: 8,
+        rawRadius: 12,
         targetRadius: 0,
         currentRadius: 0,
         ring: 1
       }
         )
+    menuItemsInitialValues.push(
+      {
+        action: 'Change Arrangement Style',
+        actionFunction: floatingObject.arrangementStyleToggle,
+        actionStatus: floatingObject.getArrangementStyle,
+        currentStatus: true,
+        label: undefined,
+        visible: true,
+        icons: ['arrangement-concave', 'arrangement-convex', 'arrangement-vertical-right', 'arrangement-vertical-left', 'arrangement-horizontal-bottom', 'arrangement-horizontal-top'],
+        rawRadius: 12,
+        targetRadius: 0,
+        currentRadius: 0,
+        ring: 1
+      }
+            )
     menuItemsInitialValues.push(
       {
         action: 'Freeze / Unfreeze',
@@ -180,7 +292,7 @@ function newUiObjectConstructor () {
         visible: true,
         iconPathOn: 'menu-mobility-unfreeze',
         iconPathOff: 'menu-mobility-freeze',
-        rawRadius: 8,
+        rawRadius: 12,
         targetRadius: 0,
         currentRadius: 0,
         ring: 1
@@ -196,7 +308,7 @@ function newUiObjectConstructor () {
         visible: true,
         iconPathOn: 'menu-tree-plus',
         iconPathOff: 'menu-tree-minus',
-        rawRadius: 8,
+        rawRadius: 12,
         targetRadius: 0,
         currentRadius: 0,
         ring: 1
@@ -210,7 +322,7 @@ function newUiObjectConstructor () {
         visible: true,
         iconPathOn: 'menu-backup',
         iconPathOff: 'menu-backup',
-        rawRadius: 8,
+        rawRadius: 12,
         targetRadius: 0,
         currentRadius: 0,
         ring: 2
@@ -224,7 +336,7 @@ function newUiObjectConstructor () {
         visible: true,
         iconPathOn: 'clone',
         iconPathOff: 'clone',
-        rawRadius: 8,
+        rawRadius: 12,
         targetRadius: 0,
         currentRadius: 0,
         ring: 2
@@ -239,13 +351,56 @@ function newUiObjectConstructor () {
           visible: true,
           iconPathOn: 'menu-share',
           iconPathOff: 'menu-share',
-          rawRadius: 8,
+          rawRadius: 12,
           targetRadius: 0,
           currentRadius: 0,
           ring: 2
         }
       )
     }
+    menuItemsInitialValues.push(
+      {
+        action: 'Remove Parent',
+        actionFunction: floatingObject.payload.onMenuItemClick,
+        label: undefined,
+        visible: true,
+        iconPathOn: 'detach',
+        iconPathOff: 'detach',
+        rawRadius: 12,
+        targetRadius: 0,
+        currentRadius: 0,
+        ring: 3
+      }
+        )
+    menuItemsInitialValues.push(
+      {
+        action: 'Remove Reference',
+        actionFunction: floatingObject.payload.onMenuItemClick,
+        label: undefined,
+        visible: true,
+        iconPathOn: 'delink',
+        iconPathOff: 'delink',
+        rawRadius: 12,
+        targetRadius: 0,
+        currentRadius: 0,
+        ring: 3
+      }
+            )
+
+    menuItemsInitialValues.push(
+      {
+        action: 'Open Documentation',
+        actionFunction: floatingObject.payload.onMenuItemClick,
+        label: undefined,
+        visible: true,
+        iconPathOn: 'help',
+        iconPathOff: 'help',
+        rawRadius: 12,
+        targetRadius: 0,
+        currentRadius: 0,
+        ring: 4
+      }
+    )
   }
 
   function getMenuItemsInitialValues (uiObject, floatingObject, payload) {
@@ -257,26 +412,26 @@ function newUiObjectConstructor () {
         if (nodeDefinition.editors.config === true) {
           uiObject.configEditor = newConfigEditor()
           uiObject.configEditor.isVisibleFunction = uiObject.isVisibleFunction
-          uiObject.configEditor.initialize()
           uiObject.configEditor.container.connectToParent(uiObject.container, false, false, true, true, false, false, false, false)
+          uiObject.configEditor.initialize()
         }
         if (nodeDefinition.editors.code === true) {
           uiObject.codeEditor = newCodeEditor()
           uiObject.codeEditor.isVisibleFunction = uiObject.isVisibleFunction
-          uiObject.codeEditor.initialize()
           uiObject.codeEditor.container.connectToParent(uiObject.container, false, false, true, true, false, false, false, false)
+          uiObject.codeEditor.initialize()
         }
         if (nodeDefinition.editors.formula === true) {
           uiObject.formulaEditor = newFormulaEditor()
           uiObject.formulaEditor.isVisibleFunction = uiObject.isVisibleFunction
-          uiObject.formulaEditor.initialize()
           uiObject.formulaEditor.container.connectToParent(uiObject.container, false, false, true, true, false, false, false, false)
+          uiObject.formulaEditor.initialize()
         }
         if (nodeDefinition.editors.condition === true) {
           uiObject.conditionEditor = newConditionEditor()
           uiObject.conditionEditor.isVisibleFunction = uiObject.isVisibleFunction
+          uiObject.conditionEditor.container.connectToParent(uiObject.container, false, false, false, true, false, false, false, false)
           uiObject.conditionEditor.initialize()
-          uiObject.conditionEditor.container.connectToParent(uiObject.container, false, false, true, true, false, false, false, false)
         }
       }
       if (nodeDefinition.addLeftIcons === true) {
@@ -304,7 +459,7 @@ function newUiObjectConstructor () {
         }
 
         if (newMenuItem.rawRadius === undefined) {
-          newMenuItem.rawRadius = 8
+          newMenuItem.rawRadius = 12
         }
 
         if (newMenuItem.targetRadius === undefined) {
@@ -327,7 +482,10 @@ function newUiObjectConstructor () {
   function setFloatingObjectBasicProperties (floatingObject, payload) {
     const FRICTION = 0.95
     const INITIAL_FRICTION = 0.97
-    const INITIAL_FONT_SIZE = 12
+    const INITIAL_FONT_SIZE = 12 * 1.5
+    const INITIAL_RADIOUS = 45 * 1.5
+    const INITIAL_IMAGE_SIZE = 80 * 1.2
+    const INITIAL_HIERARCHY_RING = 20
 
     switch (payload.node.type) {
       case 'Workspace': {
@@ -374,8 +532,9 @@ function newUiObjectConstructor () {
       floatingObject.friction = INITIAL_FRICTION
 
       floatingObject.initializeMass(500)
-      floatingObject.initializeRadius(45)
-      floatingObject.initializeImageSize(80)
+      floatingObject.initializeRadius(INITIAL_RADIOUS)
+      floatingObject.initializeHierarchyRing(INITIAL_HIERARCHY_RING)
+      floatingObject.initializeImageSize(INITIAL_IMAGE_SIZE)
       floatingObject.initializeFontSize(INITIAL_FONT_SIZE)
 
       floatingObject.fillStyle = 'rgba(' + UI_COLOR.WHITE + ', 1)'
@@ -385,8 +544,9 @@ function newUiObjectConstructor () {
       floatingObject.friction = INITIAL_FRICTION
 
       floatingObject.initializeMass(600)
-      floatingObject.initializeRadius(45)
-      floatingObject.initializeImageSize(80)
+      floatingObject.initializeRadius(INITIAL_RADIOUS)
+      floatingObject.initializeHierarchyRing(INITIAL_HIERARCHY_RING)
+      floatingObject.initializeImageSize(INITIAL_IMAGE_SIZE)
       floatingObject.initializeFontSize(INITIAL_FONT_SIZE)
 
       floatingObject.fillStyle = 'rgba(' + UI_COLOR.WHITE + ', 1)'
@@ -400,8 +560,9 @@ function newUiObjectConstructor () {
       floatingObject.friction = INITIAL_FRICTION
 
       floatingObject.initializeMass(300)
-      floatingObject.initializeRadius(40)
-      floatingObject.initializeImageSize(70)
+      floatingObject.initializeRadius(INITIAL_RADIOUS - 5)
+      floatingObject.initializeHierarchyRing(INITIAL_HIERARCHY_RING)
+      floatingObject.initializeImageSize(INITIAL_IMAGE_SIZE - 10)
       floatingObject.initializeFontSize(INITIAL_FONT_SIZE)
 
       floatingObject.fillStyle = 'rgba(' + UI_COLOR.GREEN + ', 1)'
@@ -415,8 +576,9 @@ function newUiObjectConstructor () {
       floatingObject.friction = INITIAL_FRICTION
 
       floatingObject.initializeMass(150)
-      floatingObject.initializeRadius(35)
-      floatingObject.initializeImageSize(60)
+      floatingObject.initializeRadius(INITIAL_RADIOUS - 10)
+      floatingObject.initializeHierarchyRing(INITIAL_HIERARCHY_RING)
+      floatingObject.initializeImageSize(INITIAL_IMAGE_SIZE - 20)
       floatingObject.initializeFontSize(INITIAL_FONT_SIZE)
 
       floatingObject.fillStyle = 'rgba(' + UI_COLOR.RUSTED_RED + ', 1)'
@@ -430,8 +592,9 @@ function newUiObjectConstructor () {
       floatingObject.friction = INITIAL_FRICTION
 
       floatingObject.initializeMass(75)
-      floatingObject.initializeRadius(30)
-      floatingObject.initializeImageSize(50)
+      floatingObject.initializeRadius(INITIAL_RADIOUS - 15)
+      floatingObject.initializeHierarchyRing(INITIAL_HIERARCHY_RING)
+      floatingObject.initializeImageSize(INITIAL_IMAGE_SIZE - 30)
       floatingObject.initializeFontSize(INITIAL_FONT_SIZE)
 
       floatingObject.fillStyle = 'rgba(' + UI_COLOR.TITANIUM_YELLOW + ', 1)'
@@ -445,8 +608,9 @@ function newUiObjectConstructor () {
       floatingObject.friction = INITIAL_FRICTION
 
       floatingObject.initializeMass(50)
-      floatingObject.initializeRadius(25)
-      floatingObject.initializeImageSize(40)
+      floatingObject.initializeRadius(INITIAL_RADIOUS - 20)
+      floatingObject.initializeHierarchyRing(INITIAL_HIERARCHY_RING)
+      floatingObject.initializeImageSize(INITIAL_IMAGE_SIZE - 40)
       floatingObject.initializeFontSize(INITIAL_FONT_SIZE)
 
       floatingObject.fillStyle = 'rgba(' + UI_COLOR.RED + ', 1)'
@@ -456,8 +620,9 @@ function newUiObjectConstructor () {
       floatingObject.friction = INITIAL_FRICTION
 
       floatingObject.initializeMass(25)
-      floatingObject.initializeRadius(20)
-      floatingObject.initializeImageSize(30)
+      floatingObject.initializeRadius(INITIAL_RADIOUS - 25)
+      floatingObject.initializeHierarchyRing(INITIAL_HIERARCHY_RING)
+      floatingObject.initializeImageSize(INITIAL_IMAGE_SIZE - 50)
       floatingObject.initializeFontSize(INITIAL_FONT_SIZE)
 
       floatingObject.fillStyle = 'rgba(' + UI_COLOR.RED + ', 1)'
@@ -467,6 +632,7 @@ function newUiObjectConstructor () {
   }
 
   function destroyUiObject (payload) {
+    if (payload === undefined) { return }
     floatingLayer.removeFloatingObject(payload.floatingObject.handle)
 
     payload.floatingObject.finalize()

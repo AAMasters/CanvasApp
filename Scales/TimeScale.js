@@ -12,6 +12,7 @@ function newTimeScale () {
     onMouseOverSomeTimeMachineContainer: onMouseOverSomeTimeMachineContainer,
     physics: physics,
     draw: draw,
+    drawBackground: drawBackground,
     drawForeground: drawForeground,
     getContainer: getContainer,
     initialize: initialize,
@@ -41,12 +42,8 @@ function newTimeScale () {
   let coordinateSystem
   let limitingContainer
 
-  let mouse = {
-    position: {
-      x: 0,
-      y: 0
-    }
-  }
+  let wheelDeltaDirection
+  let wheelDeltaCounter = 0
 
   return thisObject
 
@@ -63,7 +60,6 @@ function newTimeScale () {
 
     coordinateSystem = undefined
     limitingContainer = undefined
-    mouse = undefined
 
     autoScaleButton.finalize()
     autoScaleButton = undefined
@@ -97,12 +93,6 @@ function newTimeScale () {
         turnOnCounter = 0
       }
     }
-    mouse = {
-      position: {
-        x: event.x,
-        y: event.y
-      }
-    }
   }
 
   function onMouseOver (event) {
@@ -116,6 +106,42 @@ function newTimeScale () {
   }
 
   function onMouseWheel (event) {
+    if (IS_MAC) {
+      let sensitivity
+      if (event.wheelDelta < 0) {
+        if (event.shiftKey === true) {
+          sensitivity = 20
+        } else {
+          sensitivity = 5
+        }
+        if (wheelDeltaDirection === -1) {
+          wheelDeltaCounter++
+          if (wheelDeltaCounter < sensitivity) {
+            return
+          } else {
+            wheelDeltaCounter = 0
+          }
+        } else {
+          wheelDeltaCounter = 0
+          wheelDeltaDirection = -1
+          return
+        }
+      } else {
+        if (wheelDeltaDirection === 1) {
+          wheelDeltaCounter++
+          if (wheelDeltaCounter < sensitivity) {
+            return
+          } else {
+            wheelDeltaCounter = 0
+          }
+        } else {
+          wheelDeltaCounter = 0
+          wheelDeltaDirection = 1
+          return
+        }
+      }
+    }
+
     if (event.shiftKey === true) {
       autoScaleButton.container.eventHandler.raiseEvent('onMouseWheel', event)
       return
@@ -213,7 +239,7 @@ function newTimeScale () {
 
     /* Mouse Position Date Calculation */
     let timePoint = {
-      x: mouse.position.x,
+      x: canvas.mouse.position.x,
       y: 0
     }
 
@@ -228,7 +254,7 @@ function newTimeScale () {
     }
 
     timePoint = transformThisPoint(timePoint, limitingContainer.frame.container)
-    timePoint.x = mouse.position.x - thisObject.container.frame.width / 2
+    timePoint.x = canvas.mouse.position.x - thisObject.container.frame.width / 2
 
     /* Checking against the container limits. */
     if (timePoint.x < upCorner.x) { timePoint.x = upCorner.x }
@@ -244,6 +270,48 @@ function newTimeScale () {
         thisObject.container.frame.position.y < upCorner.y ||
       thisObject.container.frame.position.x < upCorner.x) {
       thisObject.isVisible = false
+    }
+
+    if (canvas.chartingSpace.viewport.zoomTargetLevel < ZOOM_OUT_THRESHOLD_FOR_DISPLAYING_SCALES) {
+      thisObject.isVisible = false
+    }
+  }
+
+  function drawBackground () {
+    drawScale()
+  }
+
+  function drawScale () {
+    const SEPARATION = 150
+    const NUMBER_OF_LABELS = Math.trunc(canvas.chartingSpace.viewport.width / SEPARATION)
+    const FONT_SIZE = 15
+
+    for (let i = 0; i <= NUMBER_OF_LABELS; i++) {
+      let timePoint = {
+        x: SEPARATION * (i + 1),
+        y: 0
+      }
+
+      let time = getDateFromPointAtBrowserCanvas(timePoint, limitingContainer, coordinateSystem)
+      let labels = scaleLabels(time, true)
+      let labelDisplace = labels[1].length * FONT_SIZE * FONT_ASPECT_RATIO
+
+      let timePoint1 = {
+        x: SEPARATION * (i + 1) - labelDisplace,
+        y: 0
+      }
+      let timePoint2 = {
+        x: SEPARATION * (i + 1) + labelDisplace,
+        y: 0
+      }
+
+      let fitPoint1 = thisObject.fitFunction(timePoint1)
+      let fitPoint2 = thisObject.fitFunction(timePoint2)
+
+      if (fitPoint1.x === timePoint1.x && fitPoint2.x === timePoint2.x) {
+        drawLabel(labels[1], 1 / 2, 0, 18, 17, FONT_SIZE, thisObject.container, UI_COLOR.GREY, timePoint1.x, undefined)
+        drawLabel(labels[2], 1 / 2, 0, 18, 30, 12, thisObject.container, UI_COLOR.GREY, timePoint1.x, undefined)
+      }
     }
   }
 
@@ -265,17 +333,27 @@ function newTimeScale () {
   function drawScaleBox () {
     if (thisObject.date === undefined) { return }
 
-    let label = thisObject.date.toUTCString()
+    let icon1 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.payload.parentNode.type)
+    let icon2 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.type)
+
+    let backgroundColor = UI_COLOR.BLACK
+    let labels = scaleLabels(thisObject.date)
+
+    drawScaleDisplay(labels[0], labels[1], labels[2], 0, 0, 0, icon1, icon2, thisObject.container, backgroundColor)
+  }
+
+  function scaleLabels (date, excludeYear) {
+    let label = date.toUTCString()
     let labelArray = label.split(' ')
     let label1 = thisObject.payload.node.payload.parentNode.name
     let label2 = labelArray[1] + ' ' + labelArray[2] + ' ' + labelArray[3]
     let label3 = labelArray[4]
 
-    let icon1 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.payload.parentNode.type)
-    let icon2 = canvas.designSpace.iconByUiObjectType.get(thisObject.payload.node.type)
+    if (excludeYear === true) {
+      label2 = labelArray[1] + ' ' + labelArray[2]
+    }
 
-    let backgroundColor = UI_COLOR.BLACK
-
-    drawScaleDisplay(label1, label2, label3, 0, 0, 0, icon1, icon2, thisObject.container, backgroundColor)
+    return [label1, label2, label3]
   }
 }
+

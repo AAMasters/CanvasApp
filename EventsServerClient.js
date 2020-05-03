@@ -1,5 +1,5 @@
 
-function newSystemEventHandler () {
+function newEventsServerClient (host, port, hostName) {
   /* Web Sockets Connection */
 
   const MODULE_NAME = 'System Event Handler'
@@ -8,10 +8,14 @@ function newSystemEventHandler () {
   const logger = newWebDebugLog()
   logger.fileName = MODULE_NAME
 
-  const WEB_SOCKETS_URL = 'ws://localhost:8080'
+  if (host === '' || host === undefined) { host = 'localhost' }
+  if (port === '' || port === undefined) { port = '8080' }
+
+  const WEB_SOCKETS_URL = 'ws://' + host + ':' + port + ''
   let WEB_SOCKETS_CONNECTION
 
   let thisObject = {
+    isConnected: isConnected,
     initialize: initialize,
     physics: physics,
     createEventHandler: createEventHandler,
@@ -23,11 +27,22 @@ function newSystemEventHandler () {
 
   let eventListeners = new Map()
   let responseWaiters = new Map()
+  let commandsWaitingConfirmation = new Map()
+  let commandsSentByTimestamp = new Map()
+  let nonce = 0
 
   return thisObject
 
   function initialize (callBackFunction) {
     setuptWebSockets(callBackFunction)
+  }
+
+  function isConnected () {
+    if (WEB_SOCKETS_CONNECTION.readyState === 1) {
+      return true
+    } else {
+      return false
+    }
   }
 
   function sendCommand (command, responseCallBack, eventsCallBack) {
@@ -44,7 +59,23 @@ function newSystemEventHandler () {
       responseWaiters.set(command.callerId, responseCallBack)
     }
 
-    WEB_SOCKETS_CONNECTION.send(JSON.stringify(command))
+    sendToWebSocketServer(command)
+  }
+
+  function sendToWebSocketServer (command) {
+    nonce++
+    let stringNonce = nonce.toString()
+    let timestamp = (new Date()).valueOf()
+    commandsWaitingConfirmation.set(stringNonce, command)
+    commandsSentByTimestamp.set(stringNonce, timestamp)
+
+    let messageToWebSocketServer = 'Web Browser' + '|*|' + stringNonce + '|*|' + JSON.stringify(command)
+
+    if (WEB_SOCKETS_CONNECTION.readyState === 1) {
+      WEB_SOCKETS_CONNECTION.send(messageToWebSocketServer)
+    } else {
+      console.log('WebSocket message could not be sent because the connection was not ready. Will retry soon. Message = ' + JSON.stringify(command))
+    }
   }
 
   function createEventHandler (eventHandlerName, callerId, responseCallBack) {
@@ -97,6 +128,23 @@ function newSystemEventHandler () {
     sendCommand(eventCommand, responseCallBack)
   }
 
+  function retryCommandsPhysics () {
+    commandsSentByTimestamp.forEach(checkTimestamp)
+
+    function checkTimestamp (timestamp, nonce) {
+      const MILISECONDS_TO_WAIT_FOR_RETRYING_A_COMMAND = 10000
+      let now = (new Date()).valueOf()
+
+      if ((now - timestamp) > MILISECONDS_TO_WAIT_FOR_RETRYING_A_COMMAND) {
+        let command = commandsWaitingConfirmation.get(nonce)
+        commandsWaitingConfirmation.delete(nonce)
+        commandsSentByTimestamp.delete(nonce)
+
+        sendToWebSocketServer(command)
+      }
+    }
+  }
+
   function physics () {
     if (WEB_SOCKETS_CONNECTION !== undefined) {
       if (WEB_SOCKETS_CONNECTION.readyState === 3) { // Connection closed. May happen after computer goes to sleep.
@@ -106,14 +154,19 @@ function newSystemEventHandler () {
         }
       }
     }
+
+    if (thisObject.isConnected() !== true) {
+      canvas.cockpitSpace.setStatus('Connecting to ' + hostName + ' Network Node. Please wait until the connection is established.', 100, canvas.cockpitSpace.statusTypes.WARNING)
+    } else {
+      retryCommandsPhysics()
+    }
+
+    DEBUG.variable4 = 'Commands Waiting For Confirmation from WS Server: ' + commandsWaitingConfirmation.size
   }
 
   function setuptWebSockets (callBackFunction) {
     try {
       WEB_SOCKETS_CONNECTION = new WebSocket(WEB_SOCKETS_URL)
-      WEB_SOCKETS_CONNECTION.onopen = () => {
-        console.log('Websocket connection opened.')
-      }
       WEB_SOCKETS_CONNECTION.onerror = error => {
         console.log('WebSocket error:' + JSON.stringify(error))
       }
@@ -146,6 +199,12 @@ function newSystemEventHandler () {
           if (handler) {
             handler(message)
           }
+          return
+        }
+
+        if (message.action === 'Acknowledge') {
+          commandsWaitingConfirmation.delete(message.nonce)
+          commandsSentByTimestamp.delete(message.nonce)
           return
         }
       }

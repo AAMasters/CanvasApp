@@ -7,11 +7,13 @@ function newUiObjectTitle () {
   logger.fileName = MODULE_NAME
 
   let thisObject = {
+    fitFunction: undefined,
     isVisibleFunction: undefined,
     allwaysVisible: undefined,
     editMode: undefined,
     container: undefined,
     payload: undefined,
+    isDefault: undefined,
     enterEditMode: enterEditMode,
     exitEditMode: exitEditMode,
     physics: physics,
@@ -42,6 +44,7 @@ function newUiObjectTitle () {
     thisObject.container = undefined
     thisObject.payload = undefined
     thisObject.isVisibleFunction = undefined
+    thisObject.fitFunction = undefined
   }
 
   function initialize (payload) {
@@ -81,6 +84,19 @@ function newUiObjectTitle () {
   }
 
   function physics () {
+    inheritancePhysics()
+    defaultPhysics()
+  }
+
+  function defaultPhysics () {
+    if (thisObject.payload.title !== 'New ' + thisObject.payload.node.type && thisObject.payload.title !== 'My ' + thisObject.payload.node.type) {
+      thisObject.isDefault = false
+    } else {
+      thisObject.isDefault = true
+    }
+  }
+
+  function inheritancePhysics () {
     if (thisObject.payload.title === undefined) { return }
 
     /* It is possible to override the default title by setting the APP SCHEMA property 'title' */
@@ -136,9 +152,36 @@ function newUiObjectTitle () {
             }
             break
           }
+          case 'Use Reference Parent Parent Parent': {
+            let nodeToUse = thisObject.payload.node.payload.referenceParent
+            if (nodeToUse !== undefined && nodeToUse.payload !== undefined) {
+              nodeToUse = thisObject.payload.node.payload.referenceParent.payload.parentNode
+              if (nodeToUse !== undefined && nodeToUse.payload !== undefined) {
+                nodeToUse = thisObject.payload.node.payload.referenceParent.payload.parentNode.payload.parentNode
+                if (nodeToUse !== undefined && nodeToUse.payload !== undefined) {
+                  thisObject.payload.title = thisObject.payload.title + separator + nodeToUse.payload.title
+                  thisObject.payload.node.name = thisObject.payload.node.name + separator + nodeToUse.payload.node.name
+                }
+              }
+            }
+            break
+          }
+          default: {
+            if (titleReference.indexOf('Use Child @') === 0) {
+              let propertyName = titleReference.substring(titleReference.indexOf('@') + 1, titleReference.length)
+              let childNode = thisObject.payload.node[propertyName]
+              thisObject.payload.title = thisObject.payload.title + separator + childNode.name
+              thisObject.payload.node.name = thisObject.payload.node.name + separator + childNode.name
+            }
+          }
         }
         separator = ' '
       }
+    }
+
+    /* The name becomes the title. */
+    if (thisObject.payload.node.name !== undefined) {
+      thisObject.payload.title = thisObject.payload.node.name
     }
 
     let title = trimTitle(thisObject.payload.title)
@@ -202,6 +245,8 @@ function newUiObjectTitle () {
         thisObject.payload.node.name = input.value
       }
     }
+    let inputDiv = document.getElementById('inputDiv')
+    inputDiv.style = 'position:absolute; top:' + '-100' + 'px; left:' + '-100' + 'px; z-index:1; '
   }
 
   function enterEditMode () {
@@ -226,7 +271,7 @@ function newUiObjectTitle () {
   }
 
   function draw () {
-    if (thisObject.isOnFocus === true || thisObject.allwaysVisible === true) {
+    if (thisObject.isOnFocus === true || thisObject.allwaysVisible === true || thisObject.isDefault === false) {
       if (thisObject.payload.uiObject.codeEditor !== undefined) {
         if (thisObject.payload.uiObject.codeEditor.visible !== true) {
           drawTitleBackground()
@@ -262,7 +307,7 @@ function newUiObjectTitle () {
       let fontSize = thisObject.payload.floatingObject.currentFontSize
       let label
 
-      if (radius > 6 && (thisObject.isOnFocus === true || thisObject.allwaysVisible === true)) {
+      if (radius > 6 && (thisObject.isOnFocus === true || thisObject.allwaysVisible === true || thisObject.isDefault === false)) {
         browserCanvasContext.strokeStyle = thisObject.payload.floatingObject.labelStrokeStyle
 
         browserCanvasContext.font = fontSize + 'px ' + UI_FONT.PRIMARY
@@ -278,6 +323,19 @@ function newUiObjectTitle () {
           }
 
           labelPoint = thisObject.container.frame.frameThisPoint(labelPoint)
+
+          if (canvas.floatingSpace.inMapMode === true) {
+            labelPoint = canvas.floatingSpace.transformPointToMap(labelPoint)
+            labelPoint.x = labelPoint.x - label.length / 2 * fontSize * FONT_ASPECT_RATIO
+            labelPoint.y = labelPoint.y - 35
+
+            let nodeDefinition = APP_SCHEMA_MAP.get(thisObject.payload.node.type)
+            if (nodeDefinition !== undefined) {
+              if (nodeDefinition.isHierarchyHead !== true) {
+                return
+              }
+            }
+          }
 
           browserCanvasContext.font = fontSize + 'px ' + UI_FONT.PRIMARY
           browserCanvasContext.fillStyle = thisObject.payload.floatingObject.labelStrokeStyle
@@ -296,3 +354,4 @@ function newUiObjectTitle () {
     return title
   }
 }
+

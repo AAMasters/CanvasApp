@@ -24,7 +24,6 @@ function newFloatingLayer () {
     removeFloatingObject: removeFloatingObject,
     getFloatingObject: getFloatingObject,
     physics: physics,
-    changeTargetRepulsion: changeTargetRepulsion,
     draw: draw,
     getContainer: getContainer,
     initialize: initialize,
@@ -200,11 +199,25 @@ function newFloatingLayer () {
     }
   }
 
+  function collapsePhysics (thisObject) {
+    let parent = thisObject.payload.chainParent
+    if (parent === undefined) { return }
+    if (parent.payload === undefined) { return }
+    if (parent.payload.floatingObject === undefined) { return }
+
+    thisObject.isParentCollapsed = parent.payload.floatingObject.isCollapsed
+    if (thisObject.collapsedManually === false) {
+      thisObject.isCollapsed = parent.payload.floatingObject.isCollapsed
+    }
+  }
+
   function makeVisible () {
     for (let i = 0; i < invisibleFloatingObjects.length; i++) {
       let floatingObject = invisibleFloatingObjects[i]
 
-      if (floatingObject.isFrozen === false && floatingObject.isParentCollapsed === false) {
+      collapsePhysics(floatingObject)
+
+      if (floatingObject.isParentCollapsed === false) {
         visibleFloatingObjects.push(floatingObject)
         invisibleFloatingObjects.splice(i, 1)  // Delete item from array.
         makeVisible()
@@ -217,7 +230,9 @@ function newFloatingLayer () {
     for (let i = 0; i < visibleFloatingObjects.length; i++) {
       let floatingObject = visibleFloatingObjects[i]
 
-      if (floatingObject.isFrozen === true || floatingObject.isParentCollapsed === true) {
+      collapsePhysics(floatingObject)
+
+      if (floatingObject.isParentCollapsed === true) {
         invisibleFloatingObjects.push(floatingObject)
         visibleFloatingObjects.splice(i, 1)  // Delete item from array.
         makeInvisible()
@@ -250,20 +265,34 @@ function newFloatingLayer () {
     try {
       makeVisible()
       makeInvisible()
+      invisiblePhysics()
+      visiblePhysics()
       applyPhysics()
+
+      function invisiblePhysics () {
+        for (let i = 0; i < invisibleFloatingObjects.length; i++) {
+          let floatingObject = invisibleFloatingObjects[i]
+          floatingObject.invisiblePhysics()
+        }
+      }
+
+      function visiblePhysics () {
+        for (let i = 0; i < visibleFloatingObjects.length; i++) {
+          let floatingObject = visibleFloatingObjects[i]
+          floatingObject.physics()
+        }
+      }
 
       function applyPhysics () {
                 /* This function makes all the calculations to apply phisycs on all visible floatingObjects in this layer. */
 
         try {
-          for (let i = 0; i < invisibleFloatingObjects.length; i++) {
-            let floatingObject = invisibleFloatingObjects[i]
-            floatingObject.physics()
-          }
+          DEBUG.variable1 = 'Invisible Floating Objets: ' + invisibleFloatingObjects.length
+          DEBUG.variable2 = 'Visible Floating Objets: ' + visibleFloatingObjects.length
 
           for (let i = 0; i < visibleFloatingObjects.length; i++) {
             let floatingObject = visibleFloatingObjects[i]
-            floatingObject.physics()
+            if (floatingObject.isFrozen === true) { continue }
 
             /* From here on, only if they are not too far. */
             if (canvas.floatingSpace.isItFar(floatingObject.payload)) { continue }
@@ -602,24 +631,6 @@ function newFloatingLayer () {
       }
     } catch (err) {
       if (ERROR_LOG === true) { logger.write('[ERROR] targetRepulsionForce -> err= ' + err.stack) }
-    }
-  }
-
-  function changeTargetRepulsion (pDelta) {
-    try {
-      if (pDelta > 0) {
-        pDelta = 1
-      } else {
-        pDelta = -1
-      }
-
-      maxTargetRepulsionForce = maxTargetRepulsionForce + pDelta / 1000
-
-      if (maxTargetRepulsionForce < 0.0000000001) {
-        maxTargetRepulsionForce = 0.0000000001
-      }
-    } catch (err) {
-      if (ERROR_LOG === true) { logger.write('[ERROR] changeTargetRepulsion -> err= ' + err.stack) }
     }
   }
 

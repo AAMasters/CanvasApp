@@ -1,6 +1,6 @@
 
 function newDesignSpace () {
-  const MODULE_NAME = 'Strategy Space'
+  const MODULE_NAME = 'Designe Space'
   let thisObject = {
     sidePanel: undefined,
     container: undefined,
@@ -265,7 +265,27 @@ function newDesignSpace () {
       'key-down',
       'key-left',
       'key-right',
-      'key-up'
+      'key-up',
+      'master-script',
+      'scripts-library',
+      'super-action',
+      'super-scripts',
+      'template-script',
+      'template-structure',
+      'template-target',
+      'delink',
+      'detach',
+      'help',
+      'key-a',
+      'key-m',
+      'key-r',
+      'arrangement-horizontal-top',
+      'arrangement-convex',
+      'arrangement-horizontal-bottom',
+      'arrangement-vertical-right',
+      'arrangement-vertical-left',
+      'arrangement-concave',
+      'move-to-phase-event'
     ]
 
     for (let i = 0; i < iconsNames.length; i++) {

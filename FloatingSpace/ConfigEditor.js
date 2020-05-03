@@ -4,8 +4,6 @@ function newConfigEditor () {
 
   let thisObject = {
     isVisibleFunction: undefined,
-    iconOK: undefined,
-    iconNOT_OK: undefined,
     visible: false,
     imagePathOK: undefined,
     imagePathNOT_OK: undefined,
@@ -34,36 +32,19 @@ function newConfigEditor () {
   thisObject.container.frame.position.y = 0
 
   let isMouseOver = false
-  let SIZE_FACTOR = 0.6
+  let SIZE_FACTOR = 1
 
   return thisObject
 
   function finalize () {
     thisObject.container.finalize()
     thisObject.container = undefined
-    thisObject.iconOK = undefined
-    thisObject.iconNOT_OK = undefined
     thisObject.payload = undefined
     thisObject.isVisibleFunction = undefined
   }
 
   function initialize () {
-    /* Load Images */
 
-    thisObject.iconOK = new Image()
-    thisObject.iconOK.onload = onImageLoad
-
-    function onImageLoad () {
-      thisObject.iconNOT_OK = new Image()
-      thisObject.iconNOT_OK.onload = onImageLoad
-
-      function onImageLoad () {
-        thisObject.canDrawIcon = true
-      }
-      thisObject.iconNOT_OK.src = window.canvasApp.urlPrefix + thisObject.imagePathNOT_OK
-    }
-    // thisObject.iconOK.src = window.canvasApp.urlPrefix + thisObject.imagePathOK
-    // thisObject.icon = thisObject.iconOK // The default value is ON.
   }
 
   function deactivate () {
@@ -79,6 +60,7 @@ function newConfigEditor () {
         thisObject.payload.uiObject.setErrorMessage(err.message, 10)
       }
     }
+    EDITOR_ON_FOCUS = false
   }
 
   function activate (payload) {
@@ -97,13 +79,14 @@ function newConfigEditor () {
                      'box-shadow: none;' +
                      'overflow:hidden;' +
                      'font-family: ' + UI_FONT.PRIMARY + ';' +
-                     'font-size: 12px;' +
+                     'font-size: 14px;' +
                      'background-color: rgb(' + UI_COLOR.DARK_TURQUOISE + ');' +
                      'color:rgb(255, 255, 255);' +
                     'width: ' + thisObject.container.frame.width + 'px;' +
                      'height: ' + thisObject.container.frame.height + 'px'
     textArea.style.display = 'block'
     textArea.focus()
+    EDITOR_ON_FOCUS = true
   }
 
   function getContainer (point) {

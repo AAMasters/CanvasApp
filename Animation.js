@@ -61,11 +61,11 @@ function newAnimation () {
     try {
       if (window.canvasApp.visible === true) {
         /* We set the canvas to its normal width and height */
-        browserCanvas.width = window.innerWidth
-        browserCanvas.height = window.innerHeight - CURRENT_TOP_MARGIN
+        // browserCanvas.width = window.innerWidth
+        // browserCanvas.height = window.innerHeight - CURRENT_TOP_MARGIN
 
         /* First thing is to clear the actual canvas */
-        // clearBrowserCanvas()
+        clearBrowserCanvas()
 
         /* We loop through the callback functions collections and execute them all. */
         let performanceMap = new Map()
@@ -111,6 +111,10 @@ function newAnimation () {
           }
         }
 
+        /* Frame per Seconds */
+
+        ANIMATION_FRAME_PER_SECONDS = Math.trunc(1000 / totalTimeConsumed)
+
         /* Performance Check */
         if (SHOW_ANIMATION_PERFORMACE === true) {
           row = 0
@@ -132,6 +136,8 @@ function newAnimation () {
           printLabel(DEBUG.variable3, 300, 100 + row * 30, 1, 20, UI_COLOR.RED)
           row++
           printLabel(DEBUG.variable4, 300, 100 + row * 30, 1, 20, UI_COLOR.RED)
+          row++
+          printLabel('Animation Frame Per Seconds: ' + ANIMATION_FRAME_PER_SECONDS, 300, 100 + row * 30, 1, 20, UI_COLOR.TITANIUM_YELLOW)
         }
       } else {
         browserCanvas.width = 1
@@ -139,6 +145,7 @@ function newAnimation () {
       }
 
       /* Media Recording */
+      videoRecorder.physics()
       if (areWeRecording === true) {
         videoRecorder.recordCanvas()
       }
@@ -161,12 +168,7 @@ function newAnimation () {
   }
 
   function clearBrowserCanvas () {
-    browserCanvasContext.beginPath()
-
-    browserCanvasContext.rect(0, 0, browserCanvas.width, browserCanvas.height)
     browserCanvasContext.fillStyle = 'rgba(' + UI_COLOR.WHITE + ', 1)'
-
-    browserCanvasContext.closePath()
-    browserCanvasContext.fill()
+    browserCanvasContext.clearRect(0, 0, browserCanvas.width, browserCanvas.height)
   }
 }

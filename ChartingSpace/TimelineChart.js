@@ -31,6 +31,8 @@ function newTimelineChart () {
 
   let timeMachineCoordinateSystem
   let timelineChartCoordinateSystem = newCoordinateSystem()
+  timelineChartCoordinateSystem.name = 'TIMELINE CHART'
+
   let coordinateSystem
 
   let layersPanel
@@ -62,7 +64,7 @@ function newTimelineChart () {
   }
 
   function finalize () {
-    coordinateSystem.eventHandler.stopListening(scaleChangedEventSubscriptionId)
+    timeMachineCoordinateSystem.eventHandler.stopListening(scaleChangedEventSubscriptionId)
 
     if (thisObject.layersManager !== undefined) {
       finalizeLayersManager()
@@ -318,7 +320,14 @@ function newTimelineChart () {
   }
 
   function thisObjectPhysics () {
-    timelineChartCoordinateSystem.physics()
+    /* Only if the plotter manager has some layer turned on, we will pass the min and max upstream. */
+    if (thisObject.plotterManager !== undefined && thisObject.plotterManager.connectors.length > 0) {
+      timelineChartCoordinateSystem.reportParentXValue(timeMachineCoordinateSystem.min.x, timeMachineCoordinateSystem.max.x)
+      timelineChartCoordinateSystem.physics()
+
+      timeMachineCoordinateSystem.reportXValue(timelineChartCoordinateSystem.childrenMin.x)
+      timeMachineCoordinateSystem.reportXValue(timelineChartCoordinateSystem.childrenMax.x)
+    }
   }
 
   function syncWithDesignerLayersManager () {
@@ -376,9 +385,17 @@ function newTimelineChart () {
 
   function drawBackground () {
     if (thisObject.container.frame.isInViewPort()) {
+      if (drawScales === true) {
+        if (thisObject.rateScale !== undefined && thisObject.rateScale.isVisible === true) { thisObject.rateScale.drawBackground() }
+      }
       drawChartsBackground()
       if (thisObject.plotterManager !== undefined) {
-        thisObject.plotterManager.draw()
+        let elementsPlotted = thisObject.plotterManager.draw()
+        if (thisObject.timeFrameScale !== undefined) {
+          thisObject.timeFrameScale.adjustTimeFrame(elementsPlotted)
+        } else {
+          return elementsPlotted
+        }
       }
     }
   }

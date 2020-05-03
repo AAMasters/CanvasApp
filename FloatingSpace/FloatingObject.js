@@ -22,8 +22,9 @@ function newFloatingObject () {
     targetRadius: 0,                        // This is the target radius of the floating object with zoom applied. It should be animated until reaching this value.
     isPinned: false,
     isFrozen: false,
-    angleToParent: ANGLE_TO_PARENT.RANGE_90,
-    distanceToParent: DISTANCE_TO_PARENT.PARENT_100X,
+    angleToParent: undefined,
+    distanceToParent: undefined,
+    arrangementStyle: ARRANGEMENT_STYLE.CONCAVE,
     isCollapsed: false,
     isParentCollapsed: false,
     frozenManually: false,
@@ -33,6 +34,7 @@ function newFloatingObject () {
     getCollapseStatus: getCollapseStatus,
     getAngleToParent: getAngleToParent,
     getDistanceToParent: getDistanceToParent,
+    getArrangementStyle: getArrangementStyle,
     nearbyFloatingObjects: [],
     setPosition: setPosition,
     pinToggle: pinToggle,
@@ -40,11 +42,14 @@ function newFloatingObject () {
     collapseToggle: collapseToggle,
     angleToParentToggle: angleToParentToggle,
     distanceToParentToggle: distanceToParentToggle,
+    arrangementStyleToggle: arrangementStyleToggle,
     physics: physics,
+    invisiblePhysics: invisiblePhysics,
     initializeMass: initializeMass,
     initializeRadius: initializeRadius,
     initializeImageSize: initializeImageSize,
     initializeFontSize: initializeFontSize,
+    initializeHierarchyRing: initializeHierarchyRing,
     initializeCurrentPosition: initializeCurrentPosition,
     radomizeCurrentSpeed: radomizeCurrentSpeed,
     drawBackground: drawBackground,
@@ -106,7 +111,9 @@ function newFloatingObject () {
   }
 
   function getContainer (point) {
+    if (thisObject.payload === undefined) { return }
     if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) { return }
+    if (canvas.floatingSpace.inMapMode === true) { return }
     let container
 
     container = thisObject.payload.uiObject.getContainer(point)
@@ -147,6 +154,10 @@ function newFloatingObject () {
 
   function getDistanceToParent () {
     return thisObject.distanceToParent
+  }
+
+  function getArrangementStyle () {
+    return thisObject.arrangementStyle
   }
 
   function freezeToggle () {
@@ -218,13 +229,45 @@ function newFloatingObject () {
     return thisObject.distanceToParent
   }
 
+  function arrangementStyleToggle () {
+    switch (thisObject.arrangementStyle) {
+      case ARRANGEMENT_STYLE.CONCAVE:
+        thisObject.arrangementStyle = ARRANGEMENT_STYLE.CONVEX
+        break
+      case ARRANGEMENT_STYLE.CONVEX:
+        thisObject.arrangementStyle = ARRANGEMENT_STYLE.VERTICAL_RIGHT
+        break
+      case ARRANGEMENT_STYLE.VERTICAL_RIGHT:
+        thisObject.arrangementStyle = ARRANGEMENT_STYLE.VERTICAL_LEFT
+        break
+      case ARRANGEMENT_STYLE.VERTICAL_LEFT:
+        thisObject.arrangementStyle = ARRANGEMENT_STYLE.HORIZONTAL_BOTTOM
+        break
+      case ARRANGEMENT_STYLE.HORIZONTAL_BOTTOM:
+        thisObject.arrangementStyle = ARRANGEMENT_STYLE.HORIZONTAL_TOP
+        break
+      case ARRANGEMENT_STYLE.HORIZONTAL_TOP:
+        thisObject.arrangementStyle = ARRANGEMENT_STYLE.CONCAVE
+        break
+    }
+
+    return thisObject.arrangementStyle
+  }
+
+  function invisiblePhysics () {
+    if (thisObject.payload.uiObject !== undefined) {
+      thisObject.payload.uiObject.invisiblePhysics()
+    }
+  }
+
   function physics () {
-    collapsePhysics()
     frozenPhysics()
     /* From here on, only if they are not too far. */
     if (canvas.floatingSpace.isItFar(thisObject.payload)) { return }
     thisObjectPhysics()
-    thisObject.payload.uiObject.physics()
+    if (thisObject.payload.uiObject !== undefined) {
+      thisObject.payload.uiObject.physics()
+    }
     positionContraintsPhysics()
   }
 
@@ -241,19 +284,10 @@ function newFloatingObject () {
     }
   }
 
-  function collapsePhysics () {
-    let parent = thisObject.payload.chainParent
-    if (parent === undefined) { return }
-    if (parent.payload === undefined) { return }
-    if (parent.payload.floatingObject === undefined) { return }
-
-    thisObject.isParentCollapsed = parent.payload.floatingObject.isCollapsed
-    if (thisObject.collapsedManually === false) {
-      thisObject.isCollapsed = parent.payload.floatingObject.isCollapsed
-    }
-  }
-
   function positionContraintsPhysics () {
+    const MAX_DISTANCE_TO_PARENT = 5000
+    const MIN_DISTANCE_TO_PARENT = 100
+
     if (thisObject.angleToParent !== ANGLE_TO_PARENT.NOT_FIXED && thisObject.isOnFocus !== true) {
       let parent = thisObject.payload.chainParent
       if (parent === undefined) { return }
@@ -285,6 +319,14 @@ function newFloatingObject () {
             distanceToParent = parent.payload.distance * 2
             break
         }
+      }
+
+      if (distanceToParent > MAX_DISTANCE_TO_PARENT) {
+        distanceToParent = MAX_DISTANCE_TO_PARENT
+      }
+
+      if (distanceToParent < MIN_DISTANCE_TO_PARENT) {
+        distanceToParent = MIN_DISTANCE_TO_PARENT
       }
 
       switch (thisObject.angleToParent) {
@@ -330,12 +372,82 @@ function newFloatingObject () {
 
       thisObject.payload.distance = distanceToParent
 
-      if (distanceToParent > 2000 || thisObject.isPinned === true) { return } // this is introduced to avoid edges cases when importing workspaces.
+      if (thisObject.isPinned === true) {
+        /* When an object is pinned, its angle to its parent needs to be calculated since it depends on where the user places the node. */
+        /*
+        if (thisObject.payload.chainParent !== undefined) {
+          let x = thisObject.container.frame.position.x - thisObject.payload.chainParent.payload.floatingObject.container.frame.position.x
+          let y = thisObject.container.frame.position.y - thisObject.payload.chainParent.payload.floatingObject.container.frame.position.y
 
-      newPosition = {
-        x: parent.payload.position.x + distanceToParent * Math.cos(toRadians(thisObject.payload.angle)),
-        y: parent.payload.position.y + distanceToParent * Math.sin(toRadians(thisObject.payload.angle))
+          thisObject.payload.angle = Math.atan(y / x)
+        }
+        */
+        return
       }
+
+      let newPosition = {
+        x: parent.payload.position.x,
+        y: parent.payload.position.y
+      }
+
+      let displacement
+
+      switch (thisObject.arrangementStyle) {
+        case ARRANGEMENT_STYLE.CONCAVE: {
+          displacement = {
+            x: distanceToParent * Math.cos(toRadians(thisObject.payload.angle)),
+            y: distanceToParent * Math.sin(toRadians(thisObject.payload.angle))
+          }
+
+          break
+        }
+        case ARRANGEMENT_STYLE.CONVEX: {
+          displacement = {
+            x: 2 * distanceToParent * Math.cos(toRadians(lastParentAngle)) + distanceToParent * Math.cos(toRadians(thisObject.payload.angle + 180)),
+            y: 2 * distanceToParent * Math.sin(toRadians(lastParentAngle)) + distanceToParent * Math.sin(toRadians(thisObject.payload.angle + 180))
+          }
+          break
+        }
+        case ARRANGEMENT_STYLE.HORIZONTAL_BOTTOM: {
+          displacement = {
+            x: distanceToParent * Math.tan(toRadians(thisObject.payload.angle)),
+            y: distanceToParent
+          }
+          break
+        }
+        case ARRANGEMENT_STYLE.HORIZONTAL_TOP: {
+          displacement = {
+            x: -distanceToParent * Math.tan(toRadians(thisObject.payload.angle)),
+            y: -distanceToParent
+          }
+          break
+        }
+        case ARRANGEMENT_STYLE.VERTICAL_RIGHT: {
+          displacement = {
+            x: distanceToParent,
+            y: distanceToParent * Math.tan(toRadians(thisObject.payload.angle))
+          }
+          break
+        }
+        case ARRANGEMENT_STYLE.VERTICAL_LEFT: {
+          displacement = {
+            x: -distanceToParent,
+            y: -distanceToParent * Math.tan(toRadians(thisObject.payload.angle))
+          }
+          break
+        }
+      }
+
+      if (displacement.x > MAX_DISTANCE_TO_PARENT) {
+        displacement.x = MAX_DISTANCE_TO_PARENT
+      }
+      if (displacement.y > MAX_DISTANCE_TO_PARENT) {
+        displacement.y = MAX_DISTANCE_TO_PARENT
+      }
+
+      newPosition.x = newPosition.x + displacement.x
+      newPosition.y = newPosition.y + displacement.y
+
       if (isNaN(newPosition.x) === false) {
         thisObject.container.frame.position.x = newPosition.x
       }
@@ -347,33 +459,45 @@ function newFloatingObject () {
 
   function thisObjectPhysics () {
                            // The radius also have a target.
+    let ANIMATION_STEP = Math.abs(thisObject.targetRadius - thisObject.rawRadius) / 5
 
-    if (Math.abs(thisObject.container.frame.radius - thisObject.targetRadius) >= 15) {
+    if (ANIMATION_STEP === 0) { ANIMATION_STEP = 10 }
+
+    if (Math.abs(thisObject.container.frame.radius - thisObject.targetRadius) >= ANIMATION_STEP) {
       if (thisObject.container.frame.radius < thisObject.targetRadius) {
-        thisObject.container.frame.radius = thisObject.container.frame.radius + 15
+        thisObject.container.frame.radius = thisObject.container.frame.radius + ANIMATION_STEP
       } else {
-        thisObject.container.frame.radius = thisObject.container.frame.radius - 15
+        thisObject.container.frame.radius = thisObject.container.frame.radius - ANIMATION_STEP
       }
+
       thisObject.container.eventHandler.raiseEvent('Dimmensions Changed', event)
     }
 
                            // The imageSize also have a target.
 
-    if (Math.abs(thisObject.currentImageSize - thisObject.targetImageSize) >= 10) {
+    if (Math.abs(thisObject.currentImageSize - thisObject.targetImageSize) >= ANIMATION_STEP) {
       if (thisObject.currentImageSize < thisObject.targetImageSize) {
-        thisObject.currentImageSize = thisObject.currentImageSize + 10
+        thisObject.currentImageSize = thisObject.currentImageSize + ANIMATION_STEP
       } else {
-        thisObject.currentImageSize = thisObject.currentImageSize - 10
+        thisObject.currentImageSize = thisObject.currentImageSize - ANIMATION_STEP
       }
     }
 
                            // The fontSize also have a target.
 
-    if (Math.abs(thisObject.currentFontSize - thisObject.targetFontSize) >= 1) {
+    if (Math.abs(thisObject.currentFontSize - thisObject.targetFontSize) >= ANIMATION_STEP / 10) {
       if (thisObject.currentFontSize < thisObject.targetFontSize) {
-        thisObject.currentFontSize = thisObject.currentFontSize + 1
+        thisObject.currentFontSize = thisObject.currentFontSize + ANIMATION_STEP / 10
       } else {
-        thisObject.currentFontSize = thisObject.currentFontSize - 1
+        thisObject.currentFontSize = thisObject.currentFontSize - ANIMATION_STEP / 10
+      }
+    }
+
+    if (Math.abs(thisObject.currentHierarchyRing - thisObject.targetHierarchyRing) >= ANIMATION_STEP) {
+      if (thisObject.currentHierarchyRing < thisObject.targetHierarchyRing) {
+        thisObject.currentHierarchyRing = thisObject.currentHierarchyRing + ANIMATION_STEP
+      } else {
+        thisObject.currentHierarchyRing = thisObject.currentHierarchyRing - ANIMATION_STEP
       }
     }
 
@@ -388,12 +512,13 @@ function newFloatingObject () {
       thisObject.targetRadius = thisObject.rawRadius * 6.0
       thisObject.targetImageSize = thisObject.rawImageSize * 2.0
       thisObject.targetFontSize = thisObject.rawFontSize * 2.0
+      thisObject.targetHierarchyRing = thisObject.rawHierarchyRing * 8.0
 
       thisObject.payload.uiObject.container.eventHandler.raiseEvent('onFocus', point)
 
       thisObject.positionLocked = true
 
-      canvas.floatingSpace.container.eventHandler.raiseEvent('onFocusAquired', thisObject.container)
+      canvas.floatingSpace.container.eventHandler.raiseEvent('onFocusAquired', thisObject)
       thisObject.isOnFocus = true
     }
   }
@@ -402,14 +527,14 @@ function newFloatingObject () {
     removeFocus()
   }
 
-  function someoneAquiredFocus (container) {
-    if (container === undefined) {
+  function someoneAquiredFocus (floatingObject) {
+    if (floatingObject === undefined || floatingObject.container === undefined) {
       return
     }
     if (thisObject.container === undefined) {
       return
     }
-    if (container.id !== thisObject.container.id) {
+    if (floatingObject.container.id !== thisObject.container.id) {
       removeFocus()
     }
   }
@@ -420,8 +545,9 @@ function newFloatingObject () {
       thisObject.targetRadius = thisObject.rawRadius * 1
       thisObject.targetImageSize = thisObject.rawImageSize * 1
       thisObject.targetFontSize = thisObject.rawFontSize * 1
+      thisObject.targetHierarchyRing = thisObject.rawHierarchyRing * 1
 
-      thisObject.payload.uiObject.container.eventHandler.raiseEvent('onNotFocus')
+      thisObject.payload.uiObject.container.eventHandler.raiseEvent('onNotFocus', thisObject.container)
 
       if (thisObject.isPinned !== true) {
         thisObject.positionLocked = false
@@ -439,20 +565,32 @@ function newFloatingObject () {
   }
 
   function drawBackground () {
-    if (canvas.floatingSpace.isItFar(thisObject.payload)) { return }
-    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) { return }
+    if (canvas.floatingSpace.isItFar(thisObject.payload) && thisObject.payload.uiObject.isShowing === false) { return }
+    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) {
+      if (thisObject.payload.uiObject.isShowing !== true) {
+        return
+      }
+    }
     thisObject.payload.uiObject.drawBackground()
   }
 
   function drawMiddleground () {
-    if (canvas.floatingSpace.isItFar(thisObject.payload)) { return }
-    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) { return }
+    if (canvas.floatingSpace.isItFar(thisObject.payload) && thisObject.payload.uiObject.isShowing === false) { return }
+    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) {
+      if (thisObject.payload.uiObject.isShowing !== true) {
+        return
+      }
+    }
     thisObject.payload.uiObject.drawMiddleground()
   }
 
   function drawForeground () {
-    if (canvas.floatingSpace.isItFar(thisObject.payload)) { return }
-    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) { return }
+    if (canvas.floatingSpace.isItFar(thisObject.payload) && thisObject.payload.uiObject.isShowing === false) { return }
+    if ((thisObject.isCollapsed === true && thisObject.collapsedManually === false) || thisObject.isParentCollapsed === true) {
+      if (thisObject.payload.uiObject.isShowing !== true) {
+        return
+      }
+    }
     thisObject.payload.uiObject.drawForeground()
   }
 
@@ -478,13 +616,13 @@ function newFloatingObject () {
 
     thisObject.rawRadius = radius
     thisObject.targetRadius = radius
-    thisObject.container.frame.radius = radius / 3
+    thisObject.container.frame.radius = radius / 5
 
     thisObject.container.eventHandler.raiseEvent('Dimmensions Changed', event)
   }
 
   function initializeImageSize (suggestedValue) {
-    var size = suggestedValue
+    let size = suggestedValue
     if (size < 2) {
       size = 2
     }
@@ -495,7 +633,7 @@ function newFloatingObject () {
   }
 
   function initializeFontSize (suggestedValue) {
-    var size = suggestedValue
+    let size = suggestedValue
     if (size < 3) {
       size = 3
     }
@@ -503,6 +641,17 @@ function newFloatingObject () {
     thisObject.rawFontSize = size
     thisObject.targetFontSize = size
     thisObject.currentFontSize = size / 3
+  }
+
+  function initializeHierarchyRing (suggestedValue) {
+    let radius = suggestedValue
+    if (radius < 3) {
+      radius = 3
+    }
+
+    thisObject.rawHierarchyRing = radius
+    thisObject.targetHierarchyRing = radius
+    thisObject.currentHierarchyRing = radius
   }
 
   function initializeCurrentPosition (arroundPoint) {

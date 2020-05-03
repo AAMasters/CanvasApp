@@ -24,6 +24,11 @@ function newNodeDeleter () {
   }
 
   function deleteUIObject (node, rootNodes) {
+    /* First we restore the reference parent to its default state */
+    if (node.payload !== undefined && node.payload.referenceParent !== undefined && node.payload.referenceParent.payload !== undefined && node.payload.referenceParent.payload.uiObject !== undefined) {
+      node.payload.referenceParent.payload.uiObject.isShowing = false
+    }
+
     let nodeDefinition = APP_SCHEMA_MAP.get(node.type)
     if (nodeDefinition !== undefined) {
       /* Remove all of its own children nodes. */
@@ -56,38 +61,40 @@ function newNodeDeleter () {
       }
 
       /* Remove node from parent */
-      if (node.payload.parentNode !== undefined) {
-        let parentNodeDefinition = APP_SCHEMA_MAP.get(node.payload.parentNode.type)
-        if (parentNodeDefinition !== undefined) {
-          if (parentNodeDefinition.properties !== undefined) {
-            for (let i = 0; i < parentNodeDefinition.properties.length; i++) {
-              let property = parentNodeDefinition.properties[i]
-              if (nodeDefinition.propertyNameAtParent === property.name) {
-                switch (property.type) {
-                  case 'node': {
-                    node.payload.parentNode[property.name] = undefined
-                  }
-                    break
-                  case 'array': {
-                    let nodePropertyArray = node.payload.parentNode[property.name]
-                    if (nodePropertyArray !== undefined) {
-                      for (let j = 0; j < nodePropertyArray.length; j++) {
-                        let arrayItem = nodePropertyArray[j]
-                        if (arrayItem.id === node.id) {
+      if (node.payload !== undefined) {
+        if (node.payload.parentNode !== undefined) {
+          let parentNodeDefinition = APP_SCHEMA_MAP.get(node.payload.parentNode.type)
+          if (parentNodeDefinition !== undefined) {
+            if (parentNodeDefinition.properties !== undefined) {
+              for (let i = 0; i < parentNodeDefinition.properties.length; i++) {
+                let property = parentNodeDefinition.properties[i]
+                if (nodeDefinition.propertyNameAtParent === property.name) {
+                  switch (property.type) {
+                    case 'node': {
+                      node.payload.parentNode[property.name] = undefined
+                    }
+                      break
+                    case 'array': {
+                      let nodePropertyArray = node.payload.parentNode[property.name]
+                      if (nodePropertyArray !== undefined) {
+                        for (let j = 0; j < nodePropertyArray.length; j++) {
+                          let arrayItem = nodePropertyArray[j]
+                          if (arrayItem.id === node.id) {
                           /* If this object is chained to the ones of the same type we need to give the next in the chain the reference to the current chain parent */
-                          if (nodeDefinition.chainedToSameType === true) {
-                            if (j < nodePropertyArray.length - 1) {
-                              let nextArrayItem = nodePropertyArray[j + 1]
-                              nextArrayItem.payload.chainParent = node.payload.chainParent
+                            if (nodeDefinition.chainedToSameType === true) {
+                              if (j < nodePropertyArray.length - 1) {
+                                let nextArrayItem = nodePropertyArray[j + 1]
+                                nextArrayItem.payload.chainParent = node.payload.chainParent
+                              }
                             }
-                          }
 
-                          nodePropertyArray.splice(j, 1)
+                            nodePropertyArray.splice(j, 1)
+                          }
                         }
                       }
                     }
+                      break
                   }
-                    break
                 }
               }
             }
@@ -112,6 +119,9 @@ function newNodeDeleter () {
   }
 
   function cleanNode (node) {
+    if (node.payload === undefined) { return }
+    if (node === undefined) { return }
+
     node.payload.targetPosition.x = undefined
     node.payload.targetPosition.y = undefined
     node.payload.visible = undefined

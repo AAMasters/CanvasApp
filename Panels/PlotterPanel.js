@@ -22,7 +22,7 @@ function newPlotterPanel () {
 
   let heightFactor = 1
   let currentRecord
-  let panelTabButton
+  let upDownButton
   let panelNode
 
   return thisObject
@@ -35,8 +35,8 @@ function newPlotterPanel () {
 
     heightFactor = undefined
     currentRecord = undefined
-    panelTabButton.finalize()
-    panelTabButton = undefined
+    upDownButton.finalize()
+    upDownButton = undefined
     panelNode = undefined
   }
 
@@ -50,18 +50,18 @@ function newPlotterPanel () {
     thisObject.container.frame.position.x = canvas.chartingSpace.viewport.visibleArea.topRight.x - thisObject.container.frame.width - thisObject.container.frame.width * Math.random() * 8
     thisObject.container.frame.position.y = canvas.chartingSpace.viewport.visibleArea.bottomLeft.y - thisObject.container.frame.height - thisObject.container.frame.height * Math.random() * 1.5
 
-    panelTabButton = newPanelTabButton()
-    panelTabButton.parentContainer = thisObject.container
-    panelTabButton.container.frame.parentFrame = thisObject.container.frame
-    panelTabButton.fitFunction = thisObject.fitFunction
-    panelTabButton.initialize()
+    upDownButton = newUpDownButton()
+    upDownButton.parentContainer = thisObject.container
+    upDownButton.container.frame.parentFrame = thisObject.container.frame
+    upDownButton.fitFunction = thisObject.fitFunction
+    upDownButton.initialize()
   }
 
   function getContainer (point) {
     if (thisObject.isVisible !== true) { return }
     let container
 
-    container = panelTabButton.getContainer(point)
+    container = upDownButton.getContainer(point)
     if (container !== undefined) { return container }
 
     if (thisObject.container.frame.isThisPointHere(point, true) === true) {
@@ -87,7 +87,7 @@ function newPlotterPanel () {
 
     thisObject.container.frame.draw(false, false, true, thisObject.fitFunction)
     plotCurrentRecordData()
-    panelTabButton.draw()
+    upDownButton.draw()
   }
 
   function plotCurrentRecordData () {
@@ -96,7 +96,8 @@ function newPlotterPanel () {
 
     const X_AXIS = thisObject.container.frame.width / 2
     const Y_AXIS = frameTitleHeight + frameBodyHeight / 2
-    const PANEL_HEIGHT = frameTitleHeight + frameBodyHeight
+
+    const PANEL_HEIGHT = UI_PANEL.HEIGHT.NORMAL
 
     if (currentRecord === undefined) { return }
     if (currentRecord.data === undefined) { return }
@@ -113,19 +114,32 @@ function newPlotterPanel () {
       }
     }
 
+    printLabel('Indicator Properties', X_AXIS, UI_PANEL.HEIGHT.NORMAL * 17 / 100, '1.00', 14, undefined, true, thisObject.container, thisObject.fitFunction)
+
     /* Second we go through the panel data. */
     if (panelNode.panelData === undefined) { return }
     for (let i = 0; i < panelNode.panelData.length; i++) {
       let panelData = panelNode.panelData[i]
 
       let labelText = panelData.name
-      let labelPosition = i * 10 + 10
-      let valuePosition = i * 10 + 15
+      let labelPosition = i * 10 + 25
+      let valuePosition = i * 10 + 30
       let value = 'No value defined.'
 
       if (valuePosition > 100) {
-        heightFactor = 2
-        thisObject.container.frame.height = UI_PANEL.HEIGHT.NORMAL * heightFactor
+        thisObject.container.frame.height = UI_PANEL.HEIGHT.NORMAL * 1.25
+      }
+
+      if (valuePosition > 125) {
+        thisObject.container.frame.height = UI_PANEL.HEIGHT.NORMAL * 1.50
+      }
+
+      if (valuePosition > 150) {
+        thisObject.container.frame.height = UI_PANEL.HEIGHT.NORMAL * 1.75
+      }
+
+      if (valuePosition > 175) {
+        thisObject.container.frame.height = UI_PANEL.HEIGHT.NORMAL * 2.00
       }
 
       if (panelData.dataFormula !== undefined) {
@@ -133,12 +147,16 @@ function newPlotterPanel () {
           value = eval(panelData.dataFormula.code)
         } catch (err) {
           if (ERROR_LOG === true) { logger.write('[ERROR] plotCurrentRecordData -> err = ' + err.stack) }
-          if (ERROR_LOG === true) { logger.write('[ERROR] plotCurrentRecordData -> dataFormula.code = ' + panelNode.dataFormula.code) }
+          if (ERROR_LOG === true) { logger.write('[ERROR] plotCurrentRecordData -> dataFormula.code = ' + panelData.dataFormula.code) }
         }
       }
 
       if (panelData.code.valueDecimals !== undefined) {
-        value = value.toFixed(panelData.code.valueDecimals)
+        if (value !== undefined) {
+          if (isNaN(value) === false) {
+            value = value.toFixed(panelData.code.valueDecimals)
+          }
+        }
       }
 
       if (panelData.code.labelText !== undefined) {
@@ -153,33 +171,8 @@ function newPlotterPanel () {
         valuePosition = panelData.code.valuePosition
       }
 
-      printLabel(labelText, X_AXIS, PANEL_HEIGHT * labelPosition / 100 / heightFactor, '1')
-      printLabel(value, X_AXIS, PANEL_HEIGHT * valuePosition / 100 / heightFactor, '0.50')
+      printLabel(labelText, X_AXIS, UI_PANEL.HEIGHT.NORMAL * labelPosition / 100 / heightFactor, '0.60', undefined, undefined, true, thisObject.container, thisObject.fitFunction)
+      printLabel(value, X_AXIS, UI_PANEL.HEIGHT.NORMAL * valuePosition / 100 / heightFactor, '1.00', 14, undefined, true, thisObject.container, thisObject.fitFunction, false, true)
     }
-
-    function printLabel (labelToPrint, x, y, opacity) {
-      let labelPoint
-      let fontSize = 10
-
-      browserCanvasContext.font = fontSize + 'px ' + UI_FONT.SECONDARY
-
-      let label = '' + labelToPrint
-
-      let xOffset = label.length / 2 * fontSize * FONT_ASPECT_RATIO
-
-      labelPoint = {
-        x: x - xOffset,
-        y: y
-      }
-
-      labelPoint = thisObject.container.frame.frameThisPoint(labelPoint)
-      labelPoint = thisObject.fitFunction(labelPoint)
-
-      browserCanvasContext.fillStyle = 'rgba(' + UI_COLOR.DARK + ', ' + opacity + ')'
-      browserCanvasContext.fillText(label, labelPoint.x, labelPoint.y)
-    }
-
-    browserCanvasContext.closePath()
-    browserCanvasContext.fill()
   }
 }

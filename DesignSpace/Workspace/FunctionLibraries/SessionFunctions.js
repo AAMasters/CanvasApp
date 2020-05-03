@@ -6,65 +6,58 @@ function newSessionFunctions () {
 
   return thisObject
 
-  function runSession (node, functionLibraryProtocolNode, callBackFunction) {
-    /* We can not run a sessionif its parent process is not running. Less if it does not have a parent. */
-    if (node.payload.parentNode === undefined) {
-      node.payload.uiObject.setErrorMessage('Session needs a Process Instance parent to be able to run.')
+  function runSession (node, functionLibraryProtocolNode, functionLibraryDependenciesFilter, callBackFunction) {
+    if (validations(node) !== true) {
       callBackFunction(GLOBAL.DEFAULT_FAIL_RESPONSE)
       return
     }
 
-    if (node.payload.parentNode.payload.uiObject.isRunning !== true) {
-      node.payload.uiObject.setErrorMessage('Session needs a Process Instance parent to be running to be able to run.')
-      callBackFunction(GLOBAL.DEFAULT_FAIL_RESPONSE)
-      return
-    }
+    let networkNode = node.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode
+    let eventsServerClient = canvas.designSpace.workspace.eventsServerClients.get(networkNode.id)
 
-    if (node.payload.referenceParent === undefined) {
-      node.payload.uiObject.setErrorMessage('Parent Process Instance need to reference a Process Definition.')
-      callBackFunction(GLOBAL.DEFAULT_FAIL_RESPONSE)
-      return
-    }
-
-    node.payload.uiObject.run(callBackFunction)
+    node.payload.uiObject.run(eventsServerClient, callBackFunction)
 
     let key = node.name + '-' + node.type + '-' + node.id
 
     let lightingPath = '' +
     'Trading System->' +
     'Parameters->' +
-    'Base Asset->Time Range->Time Frame->Slippage->Fee Structure->' +
+    'Base Asset->Quoted Asset->Time Range->Time Frame->Slippage->Fee Structure->' +
     'Exchange Account Asset->Asset->' +
     'Strategy->' +
     'Trigger Stage->Trigger On Event->Trigger Off Event->Take Position Event->' +
-    'Announcement->Telegram Bot->' +
+    'Announcement->Formula->' +
     'Open Stage->Initial Definition->Open Execution->' +
     'Position Size->Position Rate->Formula->' +
     'Initial Stop->Initial Take Profit->' +
     'Manage Stage->' +
     'Stop->Take Profit->' +
-    'Phase->Formula->Next Phase Event->' +
+    'Phase->Formula->Next Phase Event->Move to Phase Event->Phase->' +
     'Situation->Condition->Javascript Code->' +
-    'Announcement->Telegram Bot->' +
-    'Close Stage->Close Execution->'
+    'Close Stage->Close Execution->' +
+    'Announcement->Formula->'
 
     let tradingSystem = functionLibraryProtocolNode.getProtocolNode(node.payload.referenceParent, false, true, true, false, false, lightingPath)
 
     lightingPath = '' +
     'Backtesting Session->Paper Trading Session->Fordward Testing Session->Live Trading Session->' +
     'Parameters->' +
-    'Base Asset->Time Range->Time Frame->Slippage->Fee Structure->' +
-    'Exchange Account Asset->Asset->'
+    'Base Asset->Quoted Asset->Time Range->Time Frame->Slippage->Fee Structure->' +
+    'Exchange Account Asset->Asset->' +
+    'Social Bots->Telegram Bot->'
 
     let session = functionLibraryProtocolNode.getProtocolNode(node, false, true, true, false, false, lightingPath)
+
+    let dependencyFilter = functionLibraryDependenciesFilter.createFilter(node.payload.referenceParent)
 
     /* Raise event to run the session */
     let event = {
       session: JSON.stringify(session),
-      tradingSystem: JSON.stringify(tradingSystem)
+      tradingSystem: JSON.stringify(tradingSystem),
+      dependencyFilter: JSON.stringify(dependencyFilter)
     }
 
-    systemEventHandler.raiseEvent(key, 'Run Session', event)
+    eventsServerClient.raiseEvent(key, 'Run Session', event)
 
     if (node.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode === undefined) {
       callBackFunction(GLOBAL.DEFAULT_FAIL_RESPONSE)
@@ -73,9 +66,65 @@ function newSessionFunctions () {
   }
 
   function stopSession (node, functionLibraryProtocolNode, callBackFunction) {
+    if (validations(node) !== true) {
+      callBackFunction(GLOBAL.DEFAULT_FAIL_RESPONSE)
+      return
+    }
+
+    let networkNode = node.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode
+    let eventsServerClient = canvas.designSpace.workspace.eventsServerClients.get(networkNode.id)
+
     let key = node.name + '-' + node.type + '-' + node.id
-    systemEventHandler.raiseEvent(key, 'Stop Session')
+    eventsServerClient.raiseEvent(key, 'Stop Session')
 
     node.payload.uiObject.stop(callBackFunction)
+  }
+
+  function validations (node) {
+    if (node.payload.parentNode === undefined) {
+      node.payload.uiObject.setErrorMessage('Session needs a Process Instance parent to be able to run.')
+      return
+    }
+
+    if (node.payload.parentNode.payload.parentNode === undefined) {
+      node.payload.uiObject.setErrorMessage('Session needs to be inside a Trading Process Instance.')
+      return
+    }
+
+    if (node.payload.parentNode.payload.parentNode.payload.parentNode === undefined) {
+      node.payload.uiObject.setErrorMessage('Session needs to be inside a Task.')
+      return
+    }
+
+    if (node.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode === undefined) {
+      node.payload.uiObject.setErrorMessage('Session needs to be inside a Task Manager.')
+      return
+    }
+
+    if (node.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode === undefined) {
+      node.payload.uiObject.setErrorMessage('Session needs to be inside Exchange Tasks.')
+      return
+    }
+
+    if (node.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode === undefined) {
+      node.payload.uiObject.setErrorMessage('Session needs to be inside a Testing or Production Environment.')
+      return
+    }
+
+    if (node.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode.payload.parentNode === undefined) {
+      node.payload.uiObject.setErrorMessage('Session needs to be inside a Network Node.')
+      return
+    }
+
+    if (node.payload.parentNode.payload.uiObject.isRunning !== true) {
+      node.payload.uiObject.setErrorMessage('Session needs a Process Instance parent to be running.')
+      return
+    }
+
+    if (node.payload.referenceParent === undefined) {
+      node.payload.uiObject.setErrorMessage('Session needs to reference a Trading System.')
+      return
+    }
+    return true
   }
 }

@@ -7,10 +7,12 @@ function newWorkspace () {
 
   let thisObject = {
     workspaceNode: undefined,
-    tradingSystem: undefined,
     container: undefined,
     enabled: false,
     nodeChildren: undefined,
+    eventsServerClients: new Map(),
+    save: saveWorkspace,
+    getHierarchyHeads: getHierarchyHeads,
     getNodeThatIsOnFocus: getNodeThatIsOnFocus,
     getNodeByShortcutKey: getNodeByShortcutKey,
     stopAllRunningTasks: stopAllRunningTasks,
@@ -56,6 +58,10 @@ function newWorkspace () {
   let functionLibrarySessionFunctions = newSessionFunctions()
   let functionLibraryShortcutKeys = newShortcutKeys()
   let functionLibraryOnFocus = newOnFocus()
+  let functionLibrarySuperScripts = newSuperScriptsFunctions()
+  let functionLibraryCCXTFunctions = newCCXTFunctions()
+  let functionLibraryWebhookFunctions = newWebhookFunctions()
+  let functionLibraryDependenciesFilter = newDependenciesFilter()
 
   thisObject.nodeChildren = newNodeChildren()
 
@@ -63,6 +69,8 @@ function newWorkspace () {
   let circularProgressBar = newBusyProgressBar()
   circularProgressBar.fitFunction = canvas.floatingSpace.fitIntoVisibleArea
   let droppedNode
+  let sessionTimestamp = (new Date()).valueOf()
+  window.localStorage.setItem('Session Timestamp', sessionTimestamp)
 
   return thisObject
 
@@ -77,20 +85,53 @@ function newWorkspace () {
 
   function initialize () {
     try {
+      let reset = window.localStorage.getItem('Reset')
       let savedWorkspace = window.localStorage.getItem(CANVAS_APP_NAME + '.' + 'Workspace')
 
-      if (savedWorkspace === null) {
-        thisObject.workspaceNode.type = 'Workspace'
-        thisObject.workspaceNode.name = 'My Workspace'
+      if (savedWorkspace === null || reset !== null) {
+        thisObject.workspaceNode = getWorkspace()
       } else {
         thisObject.workspaceNode = JSON.parse(savedWorkspace)
       }
       functionLibraryUiObjectsFromNodes.recreateWorkspace(thisObject.workspaceNode)
+      setupEventsServerClients()
       thisObject.enabled = true
 
-      setInterval(saveWorkspace, 5000)
+      setInterval(saveWorkspace, 60000)
     } catch (err) {
       if (ERROR_LOG === true) { logger.write('[ERROR] initialize -> err = ' + err.stack) }
+    }
+  }
+
+  function setupEventsServerClients () {
+    for (let i = 0; i < thisObject.workspaceNode.rootNodes.length; i++) {
+      let rootNode = thisObject.workspaceNode.rootNodes[i]
+
+      if (rootNode.type === 'Network') {
+        for (let j = 0; j < rootNode.networkNodes.length; j++) {
+          let networkNode = rootNode.networkNodes[j]
+
+          let host
+          let webSocketsPort
+          /* At this point the node does not have the payload property yet, that is why we have to do this manually */
+          try {
+            let code = JSON.parse(networkNode.code)
+            host = code.host
+            webSocketsPort = code.webSocketsPort
+          } catch (err) {
+            console.log('[ERROR] networkNode ' + networkNode.name + ' has an invalid configuration. Cannot know the host name and webSocketsPort.')
+            return
+          }
+
+          if (host === undefined) { host = 'localhost' }
+          if (webSocketsPort === undefined) { webSocketsPort = '8080' }
+
+          let eventsServerClient = newEventsServerClient(host, webSocketsPort, networkNode.name)
+          eventsServerClient.initialize()
+
+          thisObject.eventsServerClients.set(networkNode.id, eventsServerClient)
+        }
+      }
     }
   }
 
@@ -111,11 +152,42 @@ function newWorkspace () {
   }
 
   function saveWorkspace () {
-    let textToSave = stringifyWorkspace()
-    window.localStorage.setItem(CANVAS_APP_NAME + '.' + 'Workspace', textToSave)
+    /*  When there is an exception while loading the app, the rootNodes of the workspace get into null value. To avoid saving a corrupt staate we are going to verufy we are not in that situation before saving. */
+    let workspace = canvas.designSpace.workspace.workspaceNode
+
+    for (let i = 0; i < workspace.rootNodes.length; i++) {
+      let rootNode = workspace.rootNodes[i]
+      if (rootNode === null) {
+        canvas.cockpitSpace.setStatus('Could not save the Workspace. The state of the workspace in memory is corrupt, please reload the App.', 150, canvas.cockpitSpace.statusTypes.WARNING)
+        return
+      }
+    }
+
+    let savedSessionTimestamp = window.localStorage.getItem('Session Timestamp')
+    if (Number(savedSessionTimestamp) !== sessionTimestamp) {
+      canvas.cockpitSpace.setStatus('Could not save the Workspace. You have more that one instance of the Superlagos User Interface open at the same time. Plese close this instance as it is older than the others.', 150, canvas.cockpitSpace.statusTypes.WARNING)
+    } else {
+      let textToSave = stringifyWorkspace()
+      window.localStorage.setItem(CANVAS_APP_NAME + '.' + 'Workspace', textToSave)
+      window.localStorage.setItem('Session Timestamp', sessionTimestamp)
+      return true
+    }
   }
 
   function physics () {
+    eventsServerClientsPhysics()
+    replacingWorkspacePhysics()
+  }
+
+  function eventsServerClientsPhysics () {
+    thisObject.eventsServerClients.forEach(applyPhysics)
+
+    function applyPhysics (eventServerClient) {
+      eventServerClient.physics()
+    }
+  }
+
+  function replacingWorkspacePhysics () {
     if (thisObject.enabled !== true) { return }
 
     if (workingAtTask > 0) {
@@ -137,6 +209,7 @@ function newWorkspace () {
           break
         case 4:
           functionLibraryUiObjectsFromNodes.recreateWorkspace(thisObject.workspaceNode, true)
+          setupEventsServerClients()
           workingAtTask++
           break
         case 5:
@@ -161,8 +234,9 @@ function newWorkspace () {
     let stringifyReadyNodes = []
     for (let i = 0; i < thisObject.workspaceNode.rootNodes.length; i++) {
       let rootNode = thisObject.workspaceNode.rootNodes[i]
-      let node = functionLibraryProtocolNode.getProtocolNode(rootNode, removePersonalData, false, true, true, true)
-      if (node) {
+
+      if (rootNode.isIncluded !== true) {
+        let node = functionLibraryProtocolNode.getProtocolNode(rootNode, removePersonalData, false, true, true, true)
         stringifyReadyNodes.push(node)
       }
     }
@@ -182,23 +256,17 @@ function newWorkspace () {
         if (rootNode.networkNodes !== undefined) {
           for (let j = 0; j < rootNode.networkNodes.length; j++) {
             let networkNode = rootNode.networkNodes[j]
-            if (networkNode.dataMining !== undefined) {
-              for (let i = 0; i < networkNode.dataMining.taskManagers.length; i++) {
-                let taskManager = networkNode.dataMining.taskManagers[i]
-                taskManager.payload.uiObject.menu.internalClick('Stop All Tasks')
-              }
+            if (networkNode.dataMining !== undefined && networkNode.dataMining.payload !== undefined) {
+              networkNode.dataMining.payload.uiObject.menu.internalClick('Stop All Exchange Tasks')
+              networkNode.dataMining.payload.uiObject.menu.internalClick('Stop All Exchange Tasks')
             }
-            if (networkNode.testingEnvironment !== undefined) {
-              for (let i = 0; i < networkNode.testingEnvironment.taskManagers.length; i++) {
-                let taskManager = networkNode.testingEnvironment.taskManagers[i]
-                taskManager.payload.uiObject.menu.internalClick('Stop All Tasks')
-              }
+            if (networkNode.testingEnvironment !== undefined && networkNode.testingEnvironment.payload !== undefined) {
+              networkNode.testingEnvironment.payload.uiObject.menu.internalClick('Stop All Exchange Tasks')
+              networkNode.testingEnvironment.payload.uiObject.menu.internalClick('Stop All Exchange Tasks')
             }
-            if (networkNode.productionEnvironment !== undefined) {
-              for (let i = 0; i < networkNode.productionEnvironment.taskManagers.length; i++) {
-                let taskManager = networkNode.productionEnvironment.taskManagers[i]
-                taskManager.payload.uiObject.menu.internalClick('Stop All Tasks')
-              }
+            if (networkNode.productionEnvironment !== undefined && networkNode.productionEnvironment.payload !== undefined) {
+              networkNode.productionEnvironment.payload.uiObject.menu.internalClick('Stop All Exchange Tasks')
+              networkNode.productionEnvironment.payload.uiObject.menu.internalClick('Stop All Exchange Tasks')
             }
           }
         }
@@ -220,6 +288,20 @@ function newWorkspace () {
       let node = functionLibraryOnFocus.getNodeThatIsOnFocus(rootNode)
       if (node !== undefined) { return node }
     }
+  }
+
+  function getHierarchyHeads () {
+    let nodes = []
+    for (let i = 0; i < thisObject.workspaceNode.rootNodes.length; i++) {
+      let rootNode = thisObject.workspaceNode.rootNodes[i]
+      let nodeDefinition = APP_SCHEMA_MAP.get(rootNode.type)
+      if (nodeDefinition !== undefined) {
+        if (nodeDefinition.isHierarchyHead === true) {
+          nodes.push(rootNode)
+        }
+      }
+    }
+    return nodes
   }
 
   function spawn (nodeText, mousePointer) {
@@ -336,9 +418,14 @@ function newWorkspace () {
         }
 
         break
+      case 'Debug Task':
+        {
+          functionLibraryTaskFunctions.runTask(payload.node, functionLibraryProtocolNode, true, callBackFunction)
+        }
+        break
       case 'Run Task':
         {
-          functionLibraryTaskFunctions.runTask(payload.node, functionLibraryProtocolNode, callBackFunction)
+          functionLibraryTaskFunctions.runTask(payload.node, functionLibraryProtocolNode, false, callBackFunction)
         }
         break
       case 'Stop Task':
@@ -356,14 +443,80 @@ function newWorkspace () {
           functionLibraryTaskFunctions.stopAllTasks(payload.node, functionLibraryProtocolNode)
         }
         break
+      case 'Run All Task Managers':
+        {
+          functionLibraryTaskFunctions.runAllTaskManagers(payload.node, functionLibraryProtocolNode)
+        }
+        break
+      case 'Stop All Task Managers':
+        {
+          functionLibraryTaskFunctions.stopAllTaskManagers(payload.node, functionLibraryProtocolNode)
+        }
+        break
+      case 'Run All Exchange Tasks':
+        {
+          functionLibraryTaskFunctions.runAllExchangeTasks(payload.node, functionLibraryProtocolNode)
+        }
+        break
+      case 'Stop All Exchange Tasks':
+        {
+          functionLibraryTaskFunctions.stopAllExchangeTasks(payload.node, functionLibraryProtocolNode)
+        }
+        break
+      case 'Add Missing Crypto Exchanges':
+        {
+          functionLibraryCCXTFunctions.addMissingExchanges(payload.node, functionLibraryUiObjectsFromNodes)
+        }
+        break
+      case 'Add Missing Assets':
+        {
+          functionLibraryCCXTFunctions.addMissingAssets(payload.node, functionLibraryUiObjectsFromNodes)
+        }
+        break
+      case 'Add Missing Markets':
+        {
+          functionLibraryCCXTFunctions.addMissingMarkets(payload.node, functionLibraryUiObjectsFromNodes, functionLibraryNodeCloning)
+        }
+        break
+      case 'Send Webhook Test Message':
+        {
+          functionLibraryWebhookFunctions.sendTestMessage(payload.node, callBackFunction)
+        }
+        break
       case 'Run Session':
         {
-          functionLibrarySessionFunctions.runSession(payload.node, functionLibraryProtocolNode, callBackFunction)
+          functionLibrarySessionFunctions.runSession(payload.node, functionLibraryProtocolNode, functionLibraryDependenciesFilter, callBackFunction)
         }
         break
       case 'Stop Session':
         {
           functionLibrarySessionFunctions.stopSession(payload.node, functionLibraryProtocolNode, callBackFunction)
+        }
+        break
+      case 'Run Super Action':
+        {
+          functionLibrarySuperScripts.runSuperScript(payload.node, thisObject.workspaceNode.rootNodes, functionLibraryNodeCloning, functionLibraryUiObjectsFromNodes, functionLibraryNodeDeleter)
+        }
+        break
+      case 'Remove Parent':
+        {
+          chainDetachNode(payload.node)
+        }
+        break
+      case 'Remove Reference':
+        {
+          referenceDetachNode(payload.node)
+        }
+        break
+      case 'Open Documentation':
+        {
+          let definition = APP_SCHEMA_MAP.get(payload.node.type)
+          if (definition !== undefined) {
+            if (definition.docURL !== undefined) {
+              let newTab = window.open(definition.docURL, '_blank')
+              newTab.focus()
+            }
+          }
         }
         break
     }
